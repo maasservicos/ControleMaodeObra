@@ -44,7 +44,13 @@
 
                 <div style="margin-bottom: 1rem;">
                     <label class="input-label">O.S (Ordem de Serviço)</label>
-                    <input type="number" id="txtOS" class="input-field" placeholder="000000">
+                        <input type="text" 
+                        id="txtOS" 
+                        maxlength="6" 
+                        inputmode="numeric" 
+                        oninput="this.value = this.value.replace(/[^0-9]/g, '')" 
+                        class="input-field" 
+                        placeholder="000000">       
                 </div>
             </div>
 
