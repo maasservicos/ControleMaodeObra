@@ -46,24 +46,13 @@
                     <label class="input-label">O.S (Ordem de Serviço)</label>
                     <input type="number" id="txtOS" class="input-field" placeholder="000000">
                 </div>
-
-                <div style="margin-bottom: 1.5rem;">
-                    <label class="input-label">Tarefa</label>
-                    <select id="cboTarefa" class="input-field select-field">
-                        <option value="">Selecione...</option>
-                        <option value="Corretiva">Corretiva</option>
-                        <option value="Preventiva">Preventiva</option>
-                        <option value="Socorro">Socorro</option>
-                        <option value="Implementação">Implementação</option>
-                    </select>
-                </div>
             </div>
 
             <div style="display:flex; flex-direction:column; gap:0.75rem;">
                 
                 <div id="divInicio" class="block">
                     <button onclick="definirAcao(1)" class="btn btn-xl btn-green">
-                        <span style="font-size:1.5rem">🚀</span> Iniciar Tarefa
+                        <span style="font-size:1.5rem">🚀</span> Iniciar Ordem de Serviço
                     </button>
                     <div style="height: 0.5rem;"></div>
                     <button onclick="limparTela()" class="btn btn-lg btn-clean">
@@ -80,7 +69,7 @@
                         <button onclick="definirAcao(7)" class="btn btn-square bg-red"><span style="font-size:1.5rem">🛑</span>Fim Exp.</button>
                     </div>
                     <button onclick="definirAcao(5)" class="btn btn-xl btn-blue">
-                        <span style="font-size:1.5rem">✅</span> Término da Tarefa
+                        <span style="font-size:1.5rem">✅</span> Término da Ordem de Serviço
                     </button>
                     <div style="height: 0.5rem;"></div>
                     <button onclick="limparTela()" class="btn btn-lg btn-clean">
@@ -93,7 +82,7 @@
                         ⏸️ O.S Pausada
                     </div>
                     
-                    <button onclick="definirAcao(4)" class="btn btn-xl bg-blue-light" style="color:white; margin-bottom: 5px"> 🔄 Retomar Tarefa</button>
+                    <button onclick="definirAcao(4)" class="btn btn-xl bg-blue-light" style="color:white; margin-bottom: 5px"> 🔄 Retomar Ordem de Serviço</button>
                     <button onclick="definirAcao(7)" class="btn btn-lg btn-clean" style="color: white; border-color:var(--maas-red); background-color: red;">🛑 Fim .</button>
 
                     <div style="height: 0.5rem;"></div>

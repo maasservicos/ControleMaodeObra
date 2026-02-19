@@ -259,7 +259,6 @@ function renderizarTabelaPrincipal() {
                         ${item.os}
                         <button onclick="verHistorico('${item.os}')" class="btn-icon-hist" title="Ver Histórico">📜</button>
                     </td>
-                    <td style="padding:1rem 1.5rem; color:#4b5563;">${item.tarefa}</td>
                     <td style="padding:1rem 1.5rem; text-align:right; font-family:monospace; font-weight:bold; color:#d97706;">${tempoFormatado}</td>
                     <td style="padding:1rem 1.5rem; text-align:right; font-family:monospace; font-weight:bold; color:#059669;">${custoFormatado}</td>
                     <td style="padding:1rem 1.5rem; text-align:center;">
@@ -308,7 +307,6 @@ window.verHistorico = function(osAlvo) {
                 <tr style="border-bottom:1px solid #f3f4f6;">
                     <td style="padding:0.75rem 1rem; font-family:monospace; font-size:0.75rem; color:#6b7280;">${dh}</td>
                     <td style="padding:0.75rem 1rem; font-weight:bold; color:#374151;">${info.nome}</td>
-                    <td style="padding:0.75rem 1rem; font-size:0.75rem; color:#4b5563;">${item.tarefa}</td>
                     <td style="padding:0.75rem 1rem; text-align:center; font-size:0.75rem; ${cor}">${txtStatus} (${item.status_cod})</td>
                 </tr>
             `;
@@ -368,7 +366,6 @@ window.exportarExcelDashboard = async function() {
                 "Matrícula": item.matricula,
                 "Colaborador": info.nome,
                 "O.S.": item.os,
-                "Tarefa": item.tarefa,
                 "Status": tradutorStatus[item.status_cod] || item.status_cod,
                 
                 // Nossas colunas novas:

@@ -3,7 +3,6 @@ import { client } from './supabaseClient.js';
 // Elementos
 const txtMatricula = document.getElementById('txtMatricula');
 const txtOS = document.getElementById('txtOS');
-const cboTarefa = document.getElementById('cboTarefa');
 const painelDados = document.getElementById('painelDados');
 const cardAviso = document.getElementById('cardAviso');
 const listaApontamentos = document.getElementById('listaApontamentos');
@@ -22,7 +21,6 @@ window.limparTela = function() {
     // 1. Limpa os campos visuais
     txtMatricula.value = "";
     txtOS.value = "";
-    cboTarefa.value = "";
     document.getElementById('lblNomeFuncionario').innerText = "";
     
     // 2. Destrava a tela
@@ -42,10 +40,8 @@ function ativarModoTrabalhando(dados) {
     
     txtMatricula.readOnly = true;
     txtOS.readOnly = true ;
-    cboTarefa.disabled = true;
     painelDados.disabled = true;
     txtOS.value = dados.os;
-    cboTarefa.value = dados.tarefa;
     mostrarAviso("O.S em Andamento", `O.S. ${dados.os} iniciada.`);
 }
 
@@ -57,10 +53,8 @@ function ativarModoPausado(dados) {
     
     txtMatricula.readOnly = true;
     txtOS.readOnly = true ;
-    cboTarefa.disabled = true;
     painelDados.disabled = true;
     txtOS.value = dados.os;
-    cboTarefa.value = dados.tarefa;
     mostrarAviso("O.S Pausada", `Aguardando retorno.`);
 }
 
@@ -72,7 +66,6 @@ function ativarModoLivre() {
     
     txtMatricula.readOnly = false;
     txtOS.disabled = false;
-    cboTarefa.disabled = false;
     painelDados.disabled = false;
     cardAviso.classList.add('hidden');
 }
@@ -116,17 +109,14 @@ txtMatricula.addEventListener('blur', async function() {
             // Retomada Inteligente
             if (st === 6 || st === 7) {
                 txtOS.value = last.os;
-                cboTarefa.value = last.tarefa;
                 const textoStatus = st === 6 ? "PAUSA" : "FIM DE EXPEDIENTE";
                 mostrarAviso("PRONTO PARA RETOMAR", `Último registro: ${textoStatus}. Clique em INICIAR.`);
             } else {
                 txtOS.value = "";
-                cboTarefa.value = "";
             }
         }
     } else {
         txtOS.value = "";
-        cboTarefa.value = "";
         ativarModoLivre();
     }
     carregarLista();
@@ -188,7 +178,7 @@ window.definirAcao = function(codigoStatus) {
     console.log("Cliquei no botão com código:", codigoStatus); 
 
     // Validação básica
-    if (!txtMatricula.value || !txtOS.value || !cboTarefa.value) {
+    if (!txtMatricula.value || !txtOS.value) {
         alert("Preencha todos os campos antes de clicar!");
         return;
     }
@@ -201,7 +191,7 @@ window.definirAcao = function(codigoStatus) {
         const texto = document.getElementById('textoConfirmacao');
         
         if (modal) {
-            if (codigoStatus === 5) texto.innerText = "Confirma o Término da tarefa?";
+            if (codigoStatus === 5) texto.innerText = "Confirma o Término da Ordem de Serviço?";
             if (codigoStatus === 7) texto.innerText = "Confirma o Fim do Expediente?";
             
             modal.classList.remove('hidden'); 
@@ -237,7 +227,6 @@ async function executarSalvamento(codigoStatus) {
     const matriculaBruta = txtMatricula.value.trim();
     const matricula = Number(matriculaBruta).toString();
     const os = txtOS.value.trim().padStart(6, '0');
-    const tarefa = cboTarefa.value;
     const dataHoraClick = new Date().toISOString();
 
     let horasCalculadas = null; 
@@ -261,7 +250,6 @@ async function executarSalvamento(codigoStatus) {
     const dadosParaSalvar = { 
         matricula, 
         os, 
-        tarefa, 
         status_cod: codigoStatus, 
         obs: "Web",
         created_at: dataHoraClick,
