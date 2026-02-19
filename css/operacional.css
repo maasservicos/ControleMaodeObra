@@ -112,6 +112,7 @@ body { font-family: 'Inter', sans-serif; background-color: var(--gray-100); min-
 }
 .bg-yellow { background-color: var(--maas-yellow); }
 .bg-orange { background-color: var(--maas-orange); }
+.bg-black { background-color: black; }
 .bg-red { background-color: var(--maas-red); }
 .bg-blue-light { background-color: var(--blue-500); }
 
