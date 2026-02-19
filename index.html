@@ -1,0 +1,167 @@
+<!DOCTYPE html>
+<html lang="pt-br">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Maas - Operacional</title>
+    <link rel="stylesheet" href="css/operacional.css">
+    
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;700&display=swap" rel="stylesheet">
+</head>
+<body>
+
+    <header class="header">
+        <div class="header-container">
+            <div style="display:flex; gap:0.75rem; align-items:center;">
+                <div class="logo-box">
+                    <img src="Imagens/logo.png.jpg" alt="Maas" class="logo-img">
+                </div>
+                <div class="header-title">
+                    <h1>Apontamento de Produtivo</h1>
+                </div>
+            </div>
+            <div>
+                <a href="dashboard.html" class="header-link">Ir para Painel &rarr;</a>
+            </div>
+        </div>
+    </header>
+
+    <div class="main-wrapper">
+        <div class="main-card">
+            
+            <div id="cardAviso" class="alert-card hidden">
+                <span id="msgAvisoTitulo" style="font-weight:bold; display:block; font-size:1.125rem;">AVISO</span>
+                <span id="msgAvisoDetalhe">Detalhe</span>
+            </div>
+
+            <div id="painelDados">
+                <div style="margin-bottom: 1rem;">
+                    <label class="input-label">Matrícula</label>
+                    <input type="number" id="txtMatricula" class="input-field" placeholder="Digite...">
+                    <div id="lblNomeFuncionario" class="msg-feedback"></div>
+                </div>
+
+                <div style="margin-bottom: 1rem;">
+                    <label class="input-label">O.S (Ordem de Serviço)</label>
+                    <input type="number" id="txtOS" class="input-field" placeholder="000000">
+                </div>
+
+                <div style="margin-bottom: 1.5rem;">
+                    <label class="input-label">Tarefa</label>
+                    <select id="cboTarefa" class="input-field select-field">
+                        <option value="">Selecione...</option>
+                        <option value="Corretiva">Corretiva</option>
+                        <option value="Preventiva">Preventiva</option>
+                        <option value="Socorro">Socorro</option>
+                        <option value="Implementação">Implementação</option>
+                    </select>
+                </div>
+            </div>
+
+            <div style="display:flex; flex-direction:column; gap:0.75rem;">
+                
+                <div id="divInicio" class="block">
+                    <button onclick="definirAcao(1)" class="btn btn-xl btn-green">
+                        <span style="font-size:1.5rem">🚀</span> Iniciar Tarefa
+                    </button>
+                    <div style="height: 0.5rem;"></div>
+                    <button onclick="limparTela()" class="btn btn-lg btn-clean">
+                        <span>🗑️</span> Limpar / Nova Consulta
+                    </button>
+                    <a href="dashboard.html" class="link-panel">📊 Ir para Painel de Gestão</a>
+                </div>
+
+                <div id="divTrabalhando" class="hidden">
+                    <div class="grid-cols-3" style="margin-bottom:0.75rem;">
+                        <button onclick="definirAcao(6)" class="btn btn-square bg-yellow"><span style="font-size:1.5rem">✋</span>Pausa</button>
+                        <button onclick="definirAcao(3)" class="btn btn-square bg-orange"><span style="font-size:1.5rem">🍽️</span>Intervalo</button>
+                        <button onclick="definirAcao(7)" class="btn btn-square bg-red"><span style="font-size:1.5rem">🛑</span>Fim Exp.</button>
+                        
+                    </div>
+                    <button onclick="definirAcao(5)" class="btn btn-xl btn-blue">
+                        <span style="font-size:1.5rem">✅</span> Término da Tarefa
+                    </button>
+                    <div style="height: 0.5rem;"></div>
+                    <button onclick="limparTela()" class="btn btn-lg btn-clean">
+                        <span>🗑️</span> Não sou eu / Limpar Tela
+                    </button>
+                </div>
+
+                <div id="divPausado" class="hidden">
+                    <div class="alert-card alert-blue">
+                        ⏸️ O.S Pausada
+                    </div>
+                    
+                    <button onclick="definirAcao(4)" class="btn btn-xl bg-blue-light" style="color:white; margin-bottom: 5px"> 🔄 Retomar Tarefa</button>
+                    <button onclick="definirAcao(7)" class="btn btn-lg btn-clean" style="color: white; border-color:var(--maas-red); background-color: red;">🛑 Fim .</button>
+
+                    <div style="height: 0.5rem;"></div>
+                    <button onclick="limparTela()" class="btn btn-lg btn-clean">
+                        <span>🗑️</span> Não sou eu / Limpar Tela
+                    </button>
+                </div>
+            </div>
+
+            <div class="history-section">
+                <p class="history-title">Histórico Recente</p>
+                <table class="table-history">
+                    <tbody id="listaApontamentos"></tbody>
+                </table>
+            </div>
+
+        </div>
+    </div>
+    <script type="module" src="js/operacional.js"></script>
+    <div id="modalConfirmacao" class="modal-overlay hidden">
+        <div class="modal-card">
+            <h2 style="margin-bottom: 1rem; color: #333; font-weight: bold;">
+                Confirmação
+            </h2>
+            
+            <p id="textoConfirmacao" style="margin-bottom: 1.5rem; color: #555; font-size: 1.1rem;">
+                Tem certeza?
+            </p>
+            
+            <div style="display: flex; gap: 1rem; justify-content: flex-end;">
+                
+                <button onclick="fecharModal()" class="btn btn-clean" style="    background-color: #3d3d3d; height: 45px;">
+                    Cancelar
+                </button>
+                
+                <button onclick="confirmarEnvio()" class="btn btn-green">
+                    Confirmar
+                </button>
+            </div>
+        </div>
+    </div>
+<style>
+.hidden {
+    display: none !important;
+}
+
+/* Fundo escuro atrás da janela */
+.modal-overlay {
+    position: fixed;
+    top: 0; left: 0;
+    width: 100%; height: 100%;
+    background: rgba(0,0,0,0.5); /* Sombra preta transparente */
+    display: flex;
+    justify-content: center; /* Centraliza horizontal */
+    align-items: center;     /* Centraliza vertical */
+    z-index: 9999;           /* Fica na frente de tudo */
+}
+
+/* O cartão branco da janela */
+.modal-card {
+    background: white;
+    padding: 2rem;
+    border-radius: 12px;
+    width: 90%;
+    max-width: 400px;
+    box-shadow: 0 10px 25px rgba(0,0,0,0.2);
+    text-align: center;
+}
+</style>
+</body>
+</html>

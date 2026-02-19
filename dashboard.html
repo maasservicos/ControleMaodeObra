@@ -1,0 +1,177 @@
+<!DOCTYPE html>
+<html lang="pt-br">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Maas - Painel de Gestão</title>
+    
+    <link rel="stylesheet" href="css/dashboard.css">
+    
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <script src="https://cdn.sheetjs.com/xlsx-0.20.1/package/dist/xlsx.full.min.js"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;700&display=swap" rel="stylesheet">
+</head>
+<body>
+
+    <header class="header">
+        <div class="header-container">
+            <div class="header-left">
+                <div class="logo-box">
+                    <img src="Imagens/logo.png.jpg" alt="Maas">
+                </div>
+                <div class="brand-title">
+                    <h1>Maas</h1>
+                    <p>Painel de Gestão</p>
+                </div>
+            </div>
+            
+            <div class="header-right">
+                <a href="index.html" class="nav-link">Ir para Operacional &rarr;</a>
+                <div class="status-pill">
+                    <span class="status-dot animate-pulse"></span>
+                    <span class="status-text">Online</span>
+                </div>
+            </div>
+        </div>
+    </header>
+
+    <main class="main-container">
+
+        <div class="kpi-grid">
+            
+            <div onclick="filtrarKPI('TODOS')" id="cardTotal" class="card card-blue">
+                <div>
+                    <p class="card-label">Total O.S. (Únicas)</p>
+                    <h2 class="card-value" id="kpiTotal">...</h2>
+                </div>
+                <div class="card-icon-box icon-blue">
+                    <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M3.75 6.75h16.5M3.75 12h16.5m-16.5 5.25h16.5" /></svg>
+                </div>
+            </div>
+
+            <div onclick="filtrarKPI('ANDAMENTO')" id="cardAndamento" class="card card-sky">
+                <div>
+                    <p class="card-label">Em Andamento</p>
+                    <h2 class="card-value" id="kpiAndamento">...</h2>
+                </div>
+                <div class="card-icon-box icon-sky">
+                    <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M12 6v6h4.5m4.5 0a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
+                </div>
+            </div>
+
+            <div onclick="filtrarKPI('PAUSADAS')" id="cardPausadas" class="card card-yellow">
+                <div>
+                    <p class="card-label">Pausadas</p>
+                    <h2 class="card-value" id="kpiPausadas">...</h2>
+                </div>
+                <div class="card-icon-box icon-yellow">
+                    <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M14.25 9v6m-4.5 0V9M21 12a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
+                </div>
+            </div>
+
+            <div onclick="filtrarKPI('FINALIZADAS')" id="cardFinalizadas" class="card card-green">
+                <div>
+                    <p class="card-label">Finalizadas</p>
+                    <h2 class="card-value" id="kpiFinalizadas">...</h2>
+                </div>
+                <div class="card-icon-box icon-green">
+                    <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M9 12.75L11.25 15 15 9.75M21 12a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
+                </div>
+            </div>
+
+        </div>
+
+        <div class="filters-box">
+            <div class="filter-inputs">
+                <div class="input-group">
+                    <label class="input-label">Data Início</label>
+                    <input type="date" id="dashDtInicio" class="input-field">
+                </div>
+                <div class="input-group">
+                    <label class="input-label">Data Fim</label>
+                    <input type="date" id="dashDtFim" class="input-field" style="width: auto;">
+                </div>
+                <div class="input-group">
+                    <label class="input-label">O.S</label>
+                    <input type="number" id="dashOS" placeholder="Todas" class="input-field style="width: auto;">
+                </div>
+                <div class="input-group">
+                    <label class="input-label">Matrícula</label>
+                    <input type="number" id="dashMatricula" placeholder="Todas" class="input-field" style="width: auto;">
+                </div>
+                
+                <button onclick="limparFiltros()" class="btn btn-clean" title="Limpar">
+                    <span>🧹</span> Limpar
+                </button>
+                
+                <button onclick="carregarDashboard()" class="btn btn-primary">
+                    Filtrar
+                </button>
+            </div>
+
+            <button onclick="exportarExcelDashboard()" class="btn btn-success" style="width: 100%; max-width: 200px;">
+                <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" style="width:20px; height:20px;"><path stroke-linecap="round" stroke-linejoin="round" d="M3 16.5v2.25A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75V16.5M16.5 12L12 16.5m0 0L7.5 12m4.5 4.5V3" /></svg>
+                Exportar Relatório
+            </button>
+        </div>
+
+        <div class="table-container">
+            <div class="table-scroll">
+                <table>
+                    <thead>
+                        <tr>
+                            <th class="px-6 py-4">Data/Hora</th>
+                            <th class="px-6 py-4">Matrícula</th>
+                            <th class="px-6 py-4">Nome</th>
+                            <th class="px-6 py-4">O.S.</th>
+                            <th class="px-6 py-4">Tarefa</th>
+                            <th class="px-6 py-4">Tempo</th>
+                            <th class="px-6 py-4 text-right">Custo M.O.</th>
+                            <th class="px-6 py-4 text-center">Status</th>
+                        </tr>
+                    </thead>
+                    <tbody id="tabelaDashboard" class="divide-y divide-gray-100">
+                        <tr><td colspan="6" class="p-8 text-center text-gray-400">Carregando dados...</td></tr>
+                    </tbody>
+                </table>    
+            </div>
+        </div>
+
+    </main>
+
+    <div id="modalHistorico" class="modal-overlay">
+        <div class="modal-card">
+            
+            <div class="modal-header">
+                <div>
+                    <h3 style="font-weight: bold; font-size: 1.125rem;">Histórico da O.S. <span id="lblOSModal" style="color: var(--yellow-400); font-family: monospace;">...</span></h3>
+                    <p style="font-size: 0.75rem; opacity: 0.8;">Todos os apontamentos desta ordem de serviço</p>
+                </div>
+                <button onclick="fecharHistorico()" class="btn-close-modal">✕</button>
+            </div>
+
+            <div style="padding: 0; overflow-y: auto; flex-grow: 1;">
+                <table style="width: 100%;">
+                    <thead>
+                        <tr>
+                            <th class="px-4 py-3">Data/Hora</th>
+                            <th class="px-4 py-3">Colaborador</th>
+                            <th class="px-4 py-3">Tarefa</th>
+                            <th class="px-4 py-3 text-center">Ação</th>
+                        </tr>
+                    </thead>
+                    <tbody id="tabelaHistorico">
+                        </tbody>
+                </table>
+            </div>
+
+            <div style="padding: 1rem; background-color: var(--gray-50); border-top: 1px solid var(--gray-200); text-align: right;">
+                <button onclick="fecharHistorico()" class="btn btn-clean">Fechar</button>
+            </div>
+        </div>
+    </div>
+    
+    <script type="module" src="js/dashboard.js"></script>
+
+</body>
+</html>
