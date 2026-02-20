@@ -242,13 +242,13 @@ function renderizarTabelaPrincipal() {
             let badgeClass = "badge badge-gray";
             let textoStatus = st;
             
-            if(st === 1) { badgeClass = "badge badge-blue"; textoStatus = "INÍCIO"; }
-            if(st === 2) { badgeClass = "badge badge-yellow"; textoStatus = "PEÇAS"; }
-            if(st === 3) { badgeClass = "badge badge-orange"; textoStatus = "INTERVALO"; }
-            if(st === 4) { badgeClass = "badge badge-blue"; textoStatus = "RETORNO"; }
-            if(st === 5) { badgeClass = "badge badge-green"; textoStatus = "FINALIZADO"; }
-            if(st === 6) { badgeClass = "badge badge-yellow"; textoStatus = "PAUSA"; }
-            if(st === 7) { badgeClass = "badge badge-red"; textoStatus = "FIM EXP."; }
+            if(st === 1) { badgeClass = "badge badge-blue"; textoStatus = "Início"; }
+            if(st === 2) { badgeClass = "badge badge-yellow"; textoStatus = "Peças"; }
+            if(st === 3) { badgeClass = "badge badge-orange"; textoStatus = "Intervalo"; }
+            if(st === 4) { badgeClass = "badge badge-blue"; textoStatus = "Retorno"; }
+            if(st === 5) { badgeClass = "badge badge-green"; textoStatus = "Finalizado"; }
+            if(st === 6) { badgeClass = "badge badge-yellow"; textoStatus = "Pausa"; }
+            if(st === 7) { badgeClass = "badge badge-red"; textoStatus = "Fim Exp."; }
 
             htmlLinhas += `
                 <tr class="tr-hover group">
@@ -298,9 +298,13 @@ window.verHistorico = function(osAlvo) {
         
         let txtStatus = item.status_cod;
         let cor = "color:#4b5563;";
-        if(item.status_cod == 1) { txtStatus="INÍCIO"; cor="color:#2563eb; font-weight:bold;"; }
-        if(item.status_cod == 5) { txtStatus="FINALIZADO"; cor="color:#16a34a; font-weight:bold;"; }
-        if(item.status_cod == 6) { txtStatus="PAUSA"; cor="color:#ca8a04; font-weight:bold;"; }
+        if(item.status_cod == 1) { txtStatus="Início"; cor="color:#2563eb; font-weight:bold;"; }
+        if(item.status_cod == 2) { txtStatus="Peças"; cor="color:#2563eb; font-weight:bold;"; }
+        if(item.status_cod == 3) { txtStatus="Intervalo"; cor="color:#2563eb; font-weight:bold;"; }
+        if(item.status_cod == 4) { txtStatus="Retorno"; cor="color:#2563eb; font-weight:bold;"; }
+        if(item.status_cod == 5) { txtStatus="Finalizado"; cor="color:#16a34a; font-weight:bold;"; }
+        if(item.status_cod == 6) { txtStatus="Pausa"; cor="color:#ca8a04; font-weight:bold;"; }
+        if(item.status_cod == 7) { txtStatus="Fim Expediente"; cor="color:#dc2626; font-weight:bold;"; }
         
         if(tabelaHist) {
             tabelaHist.innerHTML += `
