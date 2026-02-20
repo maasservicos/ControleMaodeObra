@@ -298,13 +298,13 @@ window.verHistorico = function(osAlvo) {
         
         let txtStatus = item.status_cod;
         let cor = "color:#4b5563;";
-        if(item.status_cod == 1) { txtStatus="Início"; cor="color:#2563eb; font-weight:bold;"; }
+        if(item.status_cod == 1) { txtStatus="Início"; cor="color:#1C1C1C; font-weight:bold;"; }
         if(item.status_cod == 2) { txtStatus="Peças"; cor="color:#2563eb; font-weight:bold;"; }
         if(item.status_cod == 3) { txtStatus="Intervalo"; cor="color:#2563eb; font-weight:bold;"; }
         if(item.status_cod == 4) { txtStatus="Retorno"; cor="color:#2563eb; font-weight:bold;"; }
-        if(item.status_cod == 5) { txtStatus="Finalizado"; cor="color:#16a34a; font-weight:bold;"; }
-        if(item.status_cod == 6) { txtStatus="Pausa"; cor="color:#ca8a04; font-weight:bold;"; }
-        if(item.status_cod == 7) { txtStatus="Fim Expediente"; cor="color:#dc2626; font-weight:bold;"; }
+        if(item.status_cod == 5) { txtStatus="Finalizado"; cor="color:#008000; font-weight:bold;"; }
+        if(item.status_cod == 6) { txtStatus="Pausa"; cor="color:#2563eb; font-weight:bold;"; }
+        if(item.status_cod == 7) { txtStatus="Fim Expediente"; cor="color:#FF0000; font-weight:bold;"; }
         
         if(tabelaHist) {
             tabelaHist.innerHTML += `
