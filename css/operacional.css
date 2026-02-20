@@ -171,3 +171,15 @@ body { font-family: 'Inter', sans-serif; background-color: var(--gray-100); min-
     box-shadow: 0 10px 25px rgba(0,0,0,0.2);
     text-align: center;
 }
+
+footer {
+    text-align: center;
+    padding: 1.5rem;
+    margin-block-end: auto;
+    border-top: 1px solid #e5e7eb;
+    color: #9ca3af;
+    font-size: 0.75rem;
+    font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+    letter-spacing: 0.05rem;
+    background-color: #f9fafb;
+}

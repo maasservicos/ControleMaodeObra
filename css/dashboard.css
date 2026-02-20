@@ -229,3 +229,15 @@ td { padding: 1rem 1.5rem; border-bottom: 1px solid var(--gray-100); }
     gap: 1rem;
     padding: 3rem;
 }
+
+footer {
+    text-align: center;
+    padding: 1.5rem;
+    margin-block-end: auto;
+    border-top: 1px solid #e5e7eb;
+    color: #9ca3af;
+    font-size: 0.75rem;
+    font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+    letter-spacing: 0.05rem;
+    background-color: #f9fafb;
+}
