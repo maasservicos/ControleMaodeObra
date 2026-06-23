@@ -24,7 +24,6 @@ function esconderErro() {
 
 function fmtDataHora(dtString) {
     const d = new Date(dtString);
-    d.setHours(d.getHours() - 3);
     const data = d.toLocaleDateString('pt-BR');
     const hora = d.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
     return `${data} ${hora}`;

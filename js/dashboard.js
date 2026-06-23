@@ -225,7 +225,6 @@ function renderizarTabelaPrincipal() {
             temDado = true;
             
             const dataObj = new Date(item.created_at);
-            dataObj.setHours(dataObj.getHours() - 3);
             const hora = dataObj.toLocaleTimeString('pt-BR', {hour:'2-digit', minute:'2-digit'});
             const dataFmt = dataObj.toLocaleDateString('pt-BR');
             
@@ -292,7 +291,6 @@ window.verHistorico = function(osAlvo) {
     let linhasHist = '';
     historicoOS.forEach(item => {
         const dataObj = new Date(item.created_at);
-        dataObj.setHours(dataObj.getHours() - 3);
         const dh = `${dataObj.toLocaleDateString()} ${dataObj.toLocaleTimeString()}`;
 
         const info = mapaFuncionarios[item.matricula] || { nome: item.matricula };
@@ -350,7 +348,6 @@ window.exportarExcelDashboard = async function() {
             
             // 1. Tratamento de Data Visual
             const dataObj = new Date(item.created_at);
-            dataObj.setHours(dataObj.getHours() - 3); // Fuso Brasil
             
             const info = mapaFuncionarios[item.matricula] || { nome: "N/D" };
             
