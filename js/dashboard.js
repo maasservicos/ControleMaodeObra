@@ -205,7 +205,7 @@ function renderizarTabelaPrincipal() {
     if (!tabela) return;
 
     if (!dadosResumidos || dadosResumidos.length === 0) {
-        tabela.innerHTML = '<tr><td colspan="8" class="text-center" style="padding:2rem; color:#9ca3af;">🔍 Nenhum registro encontrado.</td></tr>';
+        tabela.innerHTML = '<tr><td colspan="7" class="text-center" style="padding:2rem; color:#9ca3af;">🔍 Nenhum registro encontrado.</td></tr>';
         return;
     }
 
@@ -270,7 +270,7 @@ function renderizarTabelaPrincipal() {
     });
 
     if(!temDado) {
-        tabela.innerHTML = `<tr><td colspan="8" class="text-center" style="padding:2rem; color:#9ca3af;">Nenhum registro com status "${filtroKPIAtual}".</td></tr>`;
+        tabela.innerHTML = `<tr><td colspan="7" class="text-center" style="padding:2rem; color:#9ca3af;">Nenhum registro com status "${filtroKPIAtual}".</td></tr>`;
     } else {
         tabela.innerHTML = htmlLinhas;
     }
@@ -289,13 +289,14 @@ window.verHistorico = function(osAlvo) {
     
     const historicoOS = dadosBrutos.filter(i => i.os === osAlvo);
 
+    let linhasHist = '';
     historicoOS.forEach(item => {
         const dataObj = new Date(item.created_at);
         dataObj.setHours(dataObj.getHours() - 3);
         const dh = `${dataObj.toLocaleDateString()} ${dataObj.toLocaleTimeString()}`;
-        
+
         const info = mapaFuncionarios[item.matricula] || { nome: item.matricula };
-        
+
         let txtStatus = item.status_cod;
         let cor = "color:#4b5563;";
         if(item.status_cod == 1) { txtStatus="Início"; cor="color:#1C1C1C; font-weight:bold;"; }
@@ -305,17 +306,16 @@ window.verHistorico = function(osAlvo) {
         if(item.status_cod == 5) { txtStatus="Finalizado"; cor="color:#008000; font-weight:bold;"; }
         if(item.status_cod == 6) { txtStatus="Pausa"; cor="color:#2563eb; font-weight:bold;"; }
         if(item.status_cod == 7) { txtStatus="Fim Expediente"; cor="color:#FF0000; font-weight:bold;"; }
-        
-        if(tabelaHist) {
-            tabelaHist.innerHTML += `
-                <tr style="border-bottom:1px solid #f3f4f6;">
-                    <td style="padding:0.75rem 1rem; font-family:monospace; font-size:0.75rem; color:#6b7280;">${dh}</td>
-                    <td style="padding:0.75rem 1rem; font-weight:bold; color:#374151;">${info.nome}</td>
-                    <td style="padding:0.75rem 1rem; text-align:center; font-size:0.75rem; ${cor}">${txtStatus} (${item.status_cod})</td>
-                </tr>
-            `;
-        }
+
+        linhasHist += `
+            <tr style="border-bottom:1px solid #f3f4f6;">
+                <td style="padding:0.75rem 1rem; font-family:monospace; font-size:0.75rem; color:#6b7280;">${dh}</td>
+                <td style="padding:0.75rem 1rem; font-weight:bold; color:#374151;">${info.nome}</td>
+                <td style="padding:0.75rem 1rem; text-align:center; font-size:0.75rem; ${cor}">${txtStatus} (${item.status_cod})</td>
+            </tr>
+        `;
     });
+    if(tabelaHist) tabelaHist.innerHTML = linhasHist;
 
     if(modalHist) modalHist.classList.add('open');
 }

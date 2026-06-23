@@ -1,0 +1,345 @@
+/* css/consulta-os.css */
+
+:root {
+    --maas-blue: #003366;
+    --maas-blue-dark: #002244;
+    --maas-green: #10b981;
+    --gray-50:  #f9fafb;
+    --gray-100: #f3f4f6;
+    --gray-200: #e5e7eb;
+    --gray-400: #9ca3af;
+    --gray-500: #6b7280;
+    --gray-700: #374151;
+    --gray-800: #1f2937;
+    --blue-50:  #eff6ff;
+    --blue-100: #dbeafe;
+    --blue-200: #bfdbfe;
+    --blue-600: #2563eb;
+    --blue-800: #1e40af;
+    --green-50:  #f0fdf4;
+    --green-100: #d1fae5;
+    --green-700: #047857;
+    --yellow-100: #fef3c7;
+    --yellow-800: #854d0e;
+    --red-50: #fef2f2;
+    --red-600: #dc2626;
+    --white: #ffffff;
+}
+
+* { box-sizing: border-box; margin: 0; padding: 0; }
+
+body {
+    font-family: 'Inter', sans-serif;
+    background-color: var(--gray-100);
+    display: flex;
+    justify-content: center;
+    align-items: flex-start;
+    min-height: 100vh;
+    padding: 1rem;
+}
+
+/* --- WIDGET --- */
+.widget {
+    width: 100%;
+    max-width: 520px;
+    background-color: var(--white);
+    border-radius: 0.75rem;
+    box-shadow: 0 4px 24px rgba(0,0,0,0.12);
+    overflow: hidden;
+}
+
+/* --- HEADER --- */
+.widget-header {
+    background-color: var(--maas-blue);
+    padding: 0.75rem 1rem;
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+}
+
+.header-logo {
+    width: 4.5rem;
+    height: 2.5rem;
+    background-color: rgba(255,255,255,0.1);
+    border-radius: 0.375rem;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    overflow: hidden;
+    flex-shrink: 0;
+}
+
+.nav-link { font-size: 0.55rem; color: var(--blue-200); text-decoration: none; transition: color 0.2s; line-height: 1rem; }
+.nav-link:hover { color: var(--white); }
+
+
+.header-logo img {
+    height: 100%;
+    object-fit: cover;
+}
+
+.header-info {
+    display: flex;
+    flex-direction: column;
+}
+
+.header-title {
+    font-size: 0.9375rem;
+    font-weight: 700;
+    color: var(--white);
+    letter-spacing: 0.01em;
+}
+
+.header-sub {
+    font-size: 0.6875rem;
+    color: var(--blue-200);
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+}
+
+/* --- TELA DE CONSULTA --- */
+.tela-consulta {
+    padding: 1.25rem 1rem;
+}
+
+.instrucao {
+    font-size: 0.8125rem;
+    color: var(--gray-500);
+    margin-bottom: 0.875rem;
+}
+
+.search-row {
+    display: flex;
+    gap: 0.5rem;
+}
+
+.input-os {
+    flex: 1;
+    background-color: var(--gray-50);
+    border: 1px solid var(--gray-200);
+    border-radius: 0.5rem;
+    padding: 0.625rem 0.75rem;
+    font-size: 0.9375rem;
+    font-weight: 500;
+    font-family: 'Inter', sans-serif;
+    color: var(--gray-800);
+    outline: none;
+    transition: border-color 0.15s, box-shadow 0.15s;
+}
+
+.input-os:focus {
+    border-color: var(--maas-blue);
+    box-shadow: 0 0 0 2px rgba(0, 51, 102, 0.15);
+}
+
+/* Remove setas do input number */
+.input-os::-webkit-outer-spin-button,
+.input-os::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }
+.input-os[type=number] { -moz-appearance: textfield; }
+
+.btn-consultar {
+    background-color: var(--maas-blue);
+    color: var(--white);
+    border: none;
+    border-radius: 0.5rem;
+    padding: 0.625rem 1.125rem;
+    font-size: 0.875rem;
+    font-weight: 700;
+    font-family: 'Inter', sans-serif;
+    cursor: pointer;
+    white-space: nowrap;
+    transition: background-color 0.15s, transform 0.1s;
+}
+
+.btn-consultar:hover { background-color: var(--maas-blue-dark); }
+.btn-consultar:active { transform: scale(0.96); }
+
+.msg-erro {
+    margin-top: 0.625rem;
+    font-size: 0.8125rem;
+    color: var(--red-600);
+    background-color: var(--red-50);
+    border-radius: 0.375rem;
+    padding: 0.5rem 0.75rem;
+}
+
+/* --- TELA DE LOADING --- */
+.tela-loading {
+    padding: 2.5rem 1rem;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 0.875rem;
+    color: var(--gray-400);
+    font-size: 0.875rem;
+}
+
+.spinner {
+    width: 32px;
+    height: 32px;
+    border: 3px solid var(--gray-200);
+    border-top-color: var(--maas-blue);
+    border-radius: 50%;
+    animation: spin 0.8s linear infinite;
+}
+
+@keyframes spin {
+    to { transform: rotate(360deg); }
+}
+
+/* --- TELA DE RESULTADO --- */
+.tela-resultado {
+    padding: 0;
+}
+
+.resultado-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 0.875rem 1rem;
+    border-bottom: 1px solid var(--gray-100);
+    background-color: var(--gray-50);
+}
+
+.os-info {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+}
+
+.os-rotulo {
+    font-size: 0.6875rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    color: var(--gray-400);
+    letter-spacing: 0.08em;
+}
+
+.os-numero {
+    font-size: 1.125rem;
+    font-weight: 700;
+    color: var(--maas-blue);
+    font-family: monospace;
+    letter-spacing: 0.04em;
+}
+
+/* --- BADGES DE STATUS --- */
+.badge {
+    font-size: 0.6875rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    padding: 0.3rem 0.75rem;
+    border-radius: 9999px;
+}
+
+.badge-liberada {
+    background-color: var(--green-100);
+    color: var(--green-700);
+}
+
+.badge-andamento {
+    background-color: var(--yellow-100);
+    color: var(--yellow-800);
+}
+
+/* --- TABELA --- */
+.table-wrapper {
+    overflow-x: auto;
+}
+
+table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 0.8125rem;
+    color: var(--gray-700);
+}
+
+thead {
+    background-color: var(--gray-50);
+    border-bottom: 1px solid var(--gray-200);
+}
+
+th {
+    padding: 0.625rem 0.875rem;
+    font-size: 0.6875rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    color: var(--gray-500);
+    white-space: nowrap;
+    text-align: left;
+}
+
+td {
+    padding: 0.75rem 0.875rem;
+    border-bottom: 1px solid var(--gray-100);
+    vertical-align: middle;
+}
+
+tbody tr:last-child td {
+    border-bottom: none;
+}
+
+tbody tr:hover {
+    background-color: var(--gray-50);
+}
+
+.td-nome {
+    font-weight: 600;
+    color: var(--gray-800);
+}
+
+.td-mono {
+    font-family: monospace;
+    font-size: 0.75rem;
+    color: var(--gray-500);
+    white-space: nowrap;
+}
+
+.td-horas {
+    font-family: monospace;
+    font-size: 0.875rem;
+    font-weight: 700;
+    color: #d97706;
+    white-space: nowrap;
+}
+
+.em-aberto {
+    color: var(--blue-600);
+    font-weight: 600;
+    font-family: 'Inter', sans-serif;
+    font-size: 0.75rem;
+}
+
+/* --- FOOTER DO RESULTADO --- */
+.resultado-footer {
+    padding: 0.75rem 1rem;
+    border-top: 1px solid var(--gray-100);
+    display: flex;
+    justify-content: flex-end;
+    background-color: var(--gray-50);
+}
+
+.btn-nova {
+    background-color: var(--white);
+    border: 1.5px solid var(--gray-200);
+    color: var(--gray-500);
+    border-radius: 0.5rem;
+    padding: 0.5rem 1rem;
+    font-size: 0.8125rem;
+    font-weight: 600;
+    font-family: 'Inter', sans-serif;
+    cursor: pointer;
+    transition: background-color 0.15s, color 0.15s, transform 0.1s;
+}
+
+.btn-nova:hover {
+    background-color: var(--gray-100);
+    color: var(--gray-700);
+}
+
+.btn-nova:active { transform: scale(0.96); }
+
+/* --- UTILITÁRIO --- */
+.hidden { display: none !important; }
