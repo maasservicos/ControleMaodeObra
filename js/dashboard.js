@@ -192,14 +192,11 @@ function calcularKPIs() {
         const alguemPausado = statuses.some(s => s === 2 || s === 3 || s === 6);
         const todosFinalizados = statuses.every(s => s === 5 || s === 7);
 
-        console.log(`[KPI] OS ${os} | statuses: [${statuses}] | trabalhando: ${alguemTrabalhando} | pausado: ${alguemPausado} | finalizado: ${todosFinalizados}`);
-
         if (alguemTrabalhando) countAndamento++;
         else if (alguemPausado) countPausadas++;
         else if (todosFinalizados) countFinalizadas++;
     }
 
-    console.log(`[KPI] Total: ${totalOSUnicas} | Andamento: ${countAndamento} | Pausadas: ${countPausadas} | Finalizadas: ${countFinalizadas}`);
     atualizarKPIs(totalOSUnicas, countAndamento, countPausadas, countFinalizadas);
 }
 
@@ -240,7 +237,8 @@ function renderizarTabelaPrincipal() {
 
             const horasInt = Math.floor(metricas.horasDecimais);
             const minutosInt = Math.floor((metricas.horasDecimais - horasInt) * 60);
-            const tempoFormatado = `${String(horasInt).padStart(2, '0')}:${String(minutosInt).padStart(2, '0')}`;
+            const segundosInt = Math.floor(((metricas.horasDecimais - horasInt) * 60 - minutosInt) * 60);
+            const tempoFormatado = `${String(horasInt).padStart(2, '0')}:${String(minutosInt).padStart(2, '0')}:${String(segundosInt).padStart(2, '0')}`;
 
             let badgeClass = "badge badge-gray";
             let textoStatus = st;
@@ -370,7 +368,8 @@ window.exportarExcelDashboard = async function() {
             // 3. Formatação do Tempo para Excel (HH:MM)
             const horasInt = Math.floor(metricas.horasDecimais);
             const minutosInt = Math.floor((metricas.horasDecimais - horasInt) * 60);
-            const tempoExcel = `${String(horasInt).padStart(2, '0')}:${String(minutosInt).padStart(2, '0')}`;
+            const segundosInt = Math.floor(((metricas.horasDecimais - horasInt) * 60 - minutosInt) * 60);
+            const tempoExcel = `${String(horasInt).padStart(2, '0')}:${String(minutosInt).padStart(2, '0')}:${String(segundosInt).padStart(2, '0')}`;
 
             // 4. Montagem da Linha do Excel
             return {
