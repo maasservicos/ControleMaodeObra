@@ -8,6 +8,7 @@ const cardAviso = document.getElementById('cardAviso');
 const listaApontamentos = document.getElementById('listaApontamentos');
 
 let statusPendente = null;
+let apontamentosAnteriores = [];
 
 // --- FUNÇÕES AUXILIARES ---
 function mostrarAviso(titulo, detalhe) {
@@ -102,15 +103,35 @@ txtMatricula.addEventListener('blur', async function() {
 
         if (st === 1 || st === 4) {
             ativarModoTrabalhando(last);
-        } else if (st === 2 || st === 3) {
+            const osAbertas = await buscarOSsEmAberto(matriculaValor, last.os);
+            if (osAbertas.length > 0) {
+                const lista = osAbertas.map(o => {
+                    const s = Number(o.status_cod) === 2 ? 'Peças' : 'Pausa';
+                    return `O.S. ${o.os} (${s})`;
+                }).join(' | ');
+                document.getElementById('msgAvisoDetalhe').innerText = `⚠️ Tem outra O.S. em aberto: ${lista}`;
+            }
+        } else if (st === 3) {
             ativarModoPausado(last);
         } else {
             ativarModoLivre();
-            // Retomada Inteligente
-            if (st === 6 || st === 7) {
+            if (st === 2 || st === 6) {
+                // Peças ou Pausa: pode retomar a mesma O.S. ou iniciar outra
                 txtOS.value = last.os;
-                const textoStatus = st === 6 ? "PAUSA" : "FIM DE EXPEDIENTE";
-                mostrarAviso("PRONTO PARA RETOMAR", `Último registro: ${textoStatus}. Clique em INICIAR.`);
+                const textoStatus = st === 2 ? "PEÇAS" : "PAUSA";
+                const osAbertas = await buscarOSsEmAberto(matriculaValor, last.os);
+                let detalhe = `Último: ${textoStatus} na O.S. ${last.os}. Retome ou digite nova O.S.`;
+                if (osAbertas.length > 0) {
+                    const lista = osAbertas.map(o => {
+                        const s = Number(o.status_cod) === 2 ? 'Peças' : 'Pausa';
+                        return `O.S. ${o.os} (${s})`;
+                    }).join(' | ');
+                    detalhe += ` ⚠️ Também em aberto: ${lista}`;
+                }
+                mostrarAviso("PODE INICIAR OUTRA O.S.", detalhe);
+            } else if (st === 7) {
+                txtOS.value = last.os;
+                mostrarAviso("PRONTO PARA RETOMAR", `Último registro: FIM DE EXPEDIENTE. Clique em INICIAR.`);
             } else {
                 txtOS.value = "";
             }
@@ -174,35 +195,67 @@ async function carregarLista() {
 }
 
 // --- BOTÕES DE AÇÃO ---
-window.definirAcao = function(codigoStatus) {
-    console.log("Cliquei no botão com código:", codigoStatus); 
-
+window.definirAcao = async function(codigoStatus) {
     // Validação básica
     if (!txtMatricula.value || !txtOS.value) {
         alert("Preencha todos os campos antes de clicar!");
         return;
     }
 
-    // Se for Término (5) ou Fim Exp (7) -> ABRE MODAL
+    // Início de O.S: verifica se tem apontamento anterior em aberto na mesma OS
+    if (codigoStatus === 1) {
+        const os = txtOS.value.trim().padStart(6, '0');
+        const matricula = Number(txtMatricula.value.trim()).toString();
+        const anteriores = await buscarApontamentosAbertosNaOS(os, matricula);
+        if (anteriores.length > 0) {
+            apontamentosAnteriores = anteriores;
+            const nomes = anteriores.map(a => a.nome).join(', ');
+            const plural = anteriores.length > 1 ? 'apontamentos anteriores' : 'apontamento anterior';
+            document.getElementById('txtContinuacaoMsg').innerText =
+                `Existe um ${plural} de ${nomes} nesta O.S. Deseja continuar o serviço?`;
+            document.getElementById('modalContinuacao').classList.remove('hidden');
+            return;
+        }
+        executarSalvamento(1);
+        return;
+    }
+
+    // Término (5) ou Fim Expediente (7) -> abre modal de confirmação
     if (codigoStatus === 5 || codigoStatus === 7) {
         statusPendente = codigoStatus;
-        
         const modal = document.getElementById('modalConfirmacao');
         const texto = document.getElementById('textoConfirmacao');
-        
         if (modal) {
             if (codigoStatus === 5) texto.innerText = "Confirma o Término da Ordem de Serviço?";
             if (codigoStatus === 7) texto.innerText = "Confirma o Fim do Expediente?";
-            
-            modal.classList.remove('hidden'); 
-        } else {
-            console.error("ERRO: Não achei a div 'modalConfirmacao' no HTML");
+            modal.classList.remove('hidden');
         }
-    } 
-    else {
-        // Outros botões -> SALVA DIRETO
+    } else {
         executarSalvamento(codigoStatus);
     }
+}
+
+window.confirmarContinuacao = async function() {
+    document.getElementById('modalContinuacao').classList.add('hidden');
+    const os = txtOS.value.trim().padStart(6, '0');
+
+    // Grava Término (status 5) para cada apontamento anterior em aberto
+    for (const anterior of apontamentosAnteriores) {
+        await client.from('SistemaOS_Maas').insert([{
+            matricula: anterior.matricula,
+            os: os,
+            status_cod: 5,
+            obs: `Encerrado por continuidade`,
+            created_at: new Date().toISOString()
+        }]);
+    }
+    apontamentosAnteriores = [];
+    executarSalvamento(1);
+}
+
+window.cancelarContinuacao = function() {
+    document.getElementById('modalContinuacao').classList.add('hidden');
+    apontamentosAnteriores = [];
 }
 
 // Funções que o Modal chama quando clica em "Cancelar" ou "Confirmar"
@@ -326,4 +379,61 @@ async function calcularHorasTrabalhadas(matricula, os) {
     const minutos = totalMinutos % 60;
 
     return `${String(horas).padStart(2, '0')}:${String(minutos).padStart(2, '0')}`;
+}
+
+// Busca outros colaboradores com apontamento em aberto na mesma O.S.
+async function buscarApontamentosAbertosNaOS(os, matriculaAtual) {
+    const { data } = await client
+        .from('SistemaOS_Maas')
+        .select('matricula, status_cod, created_at')
+        .eq('os', os)
+        .order('created_at', { ascending: false });
+
+    if (!data) return [];
+
+    // Status mais recente por matrícula nessa O.S.
+    const mapaMatricula = {};
+    data.forEach(item => {
+        if (!mapaMatricula[item.matricula]) mapaMatricula[item.matricula] = item;
+    });
+
+    // Outros colaboradores cujo último status não é Término (5)
+    const abertos = Object.values(mapaMatricula).filter(item =>
+        item.matricula !== matriculaAtual && Number(item.status_cod) !== 5
+    );
+
+    if (abertos.length === 0) return [];
+
+    // Busca os nomes
+    const { data: funcs } = await client
+        .from('Funcionarios_Maas')
+        .select('matricula, nome')
+        .in('matricula', abertos.map(a => a.matricula));
+
+    const mapaFuncs = {};
+    if (funcs) funcs.forEach(f => mapaFuncs[f.matricula] = f.nome);
+
+    return abertos.map(a => ({ ...a, nome: mapaFuncs[a.matricula] || a.matricula }));
+}
+
+// Busca O.S. em aberto (Peças ou Pausa) do colaborador, excluindo a O.S. atual
+async function buscarOSsEmAberto(matricula, osAtual) {
+    const { data } = await client
+        .from('SistemaOS_Maas')
+        .select('os, status_cod, created_at')
+        .eq('matricula', matricula)
+        .order('created_at', { ascending: false });
+
+    if (!data) return [];
+
+    // Pega o status mais recente por O.S.
+    const mapaOS = {};
+    data.forEach(item => {
+        if (!mapaOS[item.os]) mapaOS[item.os] = item;
+    });
+
+    // Retorna apenas as O.S. diferentes da atual que estão em Peças (2) ou Pausa (6)
+    return Object.values(mapaOS).filter(item =>
+        item.os !== osAtual && (Number(item.status_cod) === 2 || Number(item.status_cod) === 6)
+    );
 }
