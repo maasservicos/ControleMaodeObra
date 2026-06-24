@@ -31,9 +31,8 @@ window.addEventListener('DOMContentLoaded', () => {
 });
 
 window.limparFiltros = function() {
-    const hoje = new Date().toISOString().split('T')[0];
-    if(dtInicio) dtInicio.value = hoje;
-    if(dtFim) dtFim.value = hoje;
+    if(dtInicio) dtInicio.value = "";
+    if(dtFim) dtFim.value = "";
     if(inpMatricula) inpMatricula.value = "";
     if(inpOS) inpOS.value = "";
     carregarDashboard();
@@ -88,10 +87,10 @@ window.carregarDashboard = async function() {
         // 2. Busca Histórico
         let query = client.from('SistemaOS_Maas')
             .select('*')
-            .gte('created_at', inicio + ' 00:00:00')
-            .lte('created_at', fim + ' 23:59:59')
             .order('created_at', { ascending: false });
 
+        if (inicio) query = query.gte('created_at', inicio + ' 00:00:00');
+        if (fim) query = query.lte('created_at', fim + ' 23:59:59');
         if (matricula) query = query.eq('matricula', matricula);
         if (os) query = query.ilike('os', `%${os}%`);
 
@@ -282,11 +281,21 @@ function atualizarKPIs(t, a, p, f) {
     if(kpiFinalizadas) kpiFinalizadas.innerText = f;
 }
 
-window.verHistorico = function(osAlvo) {
+window.verHistorico = async function(osAlvo) {
     if(lblOSModal) lblOSModal.innerText = osAlvo;
-    if(tabelaHist) tabelaHist.innerHTML = '';
-    
-    const historicoOS = dadosBrutos.filter(i => i.os === osAlvo);
+    if(tabelaHist) tabelaHist.innerHTML = '<tr><td colspan="3" style="padding:1rem; text-align:center; color:#9ca3af;">Carregando...</td></tr>';
+    if(modalHist) modalHist.classList.add('open');
+
+    const { data: historicoOS, error } = await client
+        .from('SistemaOS_Maas')
+        .select('*')
+        .eq('os', osAlvo)
+        .order('created_at', { ascending: true });
+
+    if(error || !historicoOS || historicoOS.length === 0) {
+        if(tabelaHist) tabelaHist.innerHTML = '<tr><td colspan="3" style="padding:1rem; text-align:center; color:#9ca3af;">Nenhum registro encontrado.</td></tr>';
+        return;
+    }
 
     let linhasHist = '';
     historicoOS.forEach(item => {
@@ -314,8 +323,6 @@ window.verHistorico = function(osAlvo) {
         `;
     });
     if(tabelaHist) tabelaHist.innerHTML = linhasHist;
-
-    if(modalHist) modalHist.classList.add('open');
 }
 
 window.fecharHistorico = function() {
