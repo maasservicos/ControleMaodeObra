@@ -112,7 +112,7 @@ window.carregarDashboard = async function() {
 
 function processarDados() {
     const mapaUnico = new Map();
-    mapaHistoricoOS = {}; 
+    mapaHistoricoOS = {};
 
     dadosBrutos.forEach(item => {
         const chaveIndex = `${item.os}-${item.matricula}`;
@@ -122,11 +122,13 @@ function processarDados() {
         }
         mapaHistoricoOS[chaveIndex].push(item);
 
-        if (!mapaUnico.has(chaveIndex)) {
-            mapaUnico.set(chaveIndex, item); 
+        // Sempre mantém o registro com o created_at mais recente
+        const atual = mapaUnico.get(chaveIndex);
+        if (!atual || new Date(item.created_at) > new Date(atual.created_at)) {
+            mapaUnico.set(chaveIndex, item);
         }
     });
-    
+
     dadosResumidos = Array.from(mapaUnico.values());
 }
 
@@ -190,11 +192,14 @@ function calcularKPIs() {
         const alguemPausado = statuses.some(s => s === 2 || s === 3 || s === 6);
         const todosFinalizados = statuses.every(s => s === 5 || s === 7);
 
+        console.log(`[KPI] OS ${os} | statuses: [${statuses}] | trabalhando: ${alguemTrabalhando} | pausado: ${alguemPausado} | finalizado: ${todosFinalizados}`);
+
         if (alguemTrabalhando) countAndamento++;
         else if (alguemPausado) countPausadas++;
         else if (todosFinalizados) countFinalizadas++;
     }
 
+    console.log(`[KPI] Total: ${totalOSUnicas} | Andamento: ${countAndamento} | Pausadas: ${countPausadas} | Finalizadas: ${countFinalizadas}`);
     atualizarKPIs(totalOSUnicas, countAndamento, countPausadas, countFinalizadas);
 }
 
