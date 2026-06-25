@@ -174,14 +174,29 @@ Total = 3h30
 
 **`abrirModalExclusao(id, os, hora, status)`** — Chamada pelo botão de lixeira em cada linha do histórico. Guarda o `id` do registro em `idParaExcluir` e preenche o modal com os dados da linha.
 
+O evento do botão é capturado via **event delegation** no elemento pai `listaApontamentos` — não existe `onclick` embutido na string do HTML. Os dados (`id`, `os`, `hora`, `texto`) ficam em atributos `data-*` do botão.
+
 **`confirmarExclusao()`** — Ao clicar em "Excluir" no modal:
 1. Lê matrícula e senha digitados
-2. Busca a matrícula na tabela `Admin_Maas`
-3. Compara a senha — se não bater, mostra erro e para
-4. Se bater, executa `DELETE` no Supabase pelo `id`
-5. Fecha o modal e recarrega a lista
+2. **Chama a Edge Function `excluir-apontamento` no servidor** — não acessa o banco direto
+3. A Edge Function valida a matrícula e senha usando a `SUPABASE_SERVICE_ROLE_KEY` (que só existe no servidor)
+4. Se inválido, retorna `401` com mensagem de erro
+5. Se válido, a Edge Function executa o `DELETE` e retorna `200`
+6. O browser fecha o modal e recarrega a lista
 
-**Segurança:** A tabela `Admin_Maas` tem RLS ativado com política de somente leitura. A tabela `SistemaOS_Maas` tem uma política de DELETE liberada — a validação de quem pode deletar é feita no código JS antes de chamar o banco.
+**Por que Edge Function?** Se a validação fosse feita no browser (JS do cliente), qualquer pessoa com o DevTools aberto poderia inspecionar o código, ver a lógica de comparação de senha e contorná-la. Na Edge Function, o código roda no servidor do Supabase e o browser nunca vê a senha do admin nem a Service Role Key.
+
+```
+Browser:
+  matricula + senha + id  →  POST /functions/v1/excluir-apontamento
+                                        │
+                               Supabase Edge Function (servidor):
+                                 - consulta Admin_Maas (com service role)
+                                 - compara senha
+                                 - executa DELETE se válido
+                                        │
+                                   ← { success: true } ou { error: "..." }
+```
 
 ---
 
@@ -321,10 +336,122 @@ O Vercel faz o deploy automaticamente.
 
 ---
 
+## Segurança Aplicada
+
+Esta seção documenta todas as medidas de segurança que foram implementadas no sistema e o motivo de cada uma.
+
+---
+
+### 1. Credenciais fora do código-fonte (`VITE_` + `.env`)
+
+**Onde:** `js/supabaseClient.js`, arquivo `.env`, painel do Vercel.
+
+As chaves do Supabase ficam em variáveis de ambiente, nunca escritas diretamente no código:
+
+```javascript
+const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL;
+const SUPABASE_KEY = import.meta.env.VITE_SUPABASE_KEY;
+```
+
+O arquivo `.env` está no `.gitignore` e nunca é enviado ao GitHub. No Vercel, as variáveis são configuradas no painel. Isso evita que as chaves fiquem expostas no histórico de commits.
+
+**Nota:** A `SUPABASE_KEY` pública (anon key) ainda é visível no browser, pois precisa ser injetada pelo Vite no build. Isso é esperado e seguro — ela só permite o que as políticas de RLS autorizam.
+
+---
+
+### 2. Proteção contra XSS — função `esc()`
+
+**Onde:** `js/operacional.js`, `js/dashboard.js`, `js/consulta-os.js` (início de cada arquivo).
+
+```javascript
+function esc(str) {
+    return String(str ?? '')
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#039;');
+}
+```
+
+**Por que é necessário:** Se um dado do banco contiver `<script>alert('hack')</script>` e for inserido diretamente via `innerHTML`, esse script será executado no browser de qualquer pessoa que abrir a página. A função `esc()` converte os caracteres especiais em entidades HTML inofensivas.
+
+**Regra:** Todo valor vindo do banco que entra no HTML via `innerHTML` ou template literal passa pelo `esc()` primeiro.
+
+---
+
+### 3. Event Delegation no lugar de `onclick` embutido
+
+**Onde:** Botões de excluir em `js/operacional.js`, botões de histórico em `js/dashboard.js`.
+
+**Antes (inseguro):**
+```javascript
+// O valor de item.os ia direto dentro da string do onclick
+htmlLinhas += `<button onclick="verHistorico('${item.os}')">...`;
+```
+
+**Depois (seguro):**
+```javascript
+// O valor fica num atributo data-* (escapado pelo esc())
+htmlLinhas += `<button class="btn-icon-hist" data-os="${esc(item.os)}">...`;
+
+// Um único listener no pai captura todos os cliques
+tabela.addEventListener('click', function(e) {
+    const btn = e.target.closest('.btn-icon-hist');
+    if (!btn) return;
+    verHistorico(btn.dataset.os); // lê o valor de forma segura
+});
+```
+
+**Por que é mais seguro:** Na versão antiga, se `item.os` contivesse `'); deletarTudo(); //`, isso seria executado como JavaScript. Com `data-*`, o valor é sempre tratado como texto, nunca como código.
+
+---
+
+### 4. Edge Function para exclusão autenticada
+
+**Onde:** `supabase/functions/excluir-apontamento/index.ts`
+
+Detalhado na seção "Exclusão de Apontamento" acima. O ponto central: **nenhuma lógica de validação de senha existe no browser**. O browser apenas envia os dados e recebe sucesso ou erro.
+
+A `SUPABASE_SERVICE_ROLE_KEY` (que tem permissão total no banco, bypassando RLS) existe **apenas** nas variáveis de ambiente do servidor do Supabase. Nunca no código do frontend.
+
+---
+
+### 5. RLS (Row Level Security) no Supabase
+
+Cada tabela tem suas políticas configuradas para limitar o que a chave pública (anon key) pode fazer:
+
+| Tabela | SELECT | INSERT | UPDATE | DELETE |
+|---|---|---|---|---|
+| `Funcionarios_Maas` | ✅ Sim | ❌ Não | ❌ Não | ❌ Não |
+| `SistemaOS_Maas` | ✅ Sim | ✅ Sim | ❌ Não | ❌ Não (só via Edge Function) |
+| `Admin_Maas` | ✅ Sim (apenas `nome`) | ❌ Não | ❌ Não | ❌ Não |
+| `ServicosAvulsos_Maas` | ✅ Sim | ❌ Não | ❌ Não | ❌ Não |
+
+A tabela `SistemaOS_Maas` **não tem política de DELETE para anon**. Isso significa que mesmo que alguém tente fazer um DELETE direto com a chave pública, o Supabase bloqueia. O único caminho de exclusão é via Edge Function, que usa a Service Role Key no servidor.
+
+**Para consultar as políticas ativas no Supabase:**
+```sql
+select tablename, policyname, cmd, qual
+from pg_policies
+where schemaname = 'public'
+order by tablename;
+```
+
+---
+
+### Limitação conhecida: senhas em texto plano
+
+As senhas na tabela `Admin_Maas` estão armazenadas sem hash (texto puro). Isso significa que quem tiver acesso direto ao banco consegue ler as senhas. Em um sistema maior, as senhas deveriam ser hasheadas com `bcrypt` ou similar antes de serem salvas. Para o escopo atual do sistema, isso foi aceito como limitação consciente.
+
+---
+
 ## Dicas para Depurar Erros
 
 - **Abra o console do navegador (F12 → Console)** — a maioria dos erros aparece lá
 - **Erros do Supabase** ficam no objeto `error` retornado pelas queries — o código já loga com `console.error`
 - **Se uma função não for encontrada** (ex: `definirAcao is not defined`) → verifique se ela está como `window.nomeFuncao`
 - **Se o dado não aparecer** → verifique o RLS no Supabase (pode estar bloqueando a leitura)
+- **Se a exclusão retornar 401** → matrícula ou senha incorretos na tabela `Admin_Maas`
+- **Se a Edge Function retornar 500** → verifique os logs no painel do Supabase em Functions → Logs
 - **`npm run build` antes de commitar** — garante que não há erros que quebram o deploy

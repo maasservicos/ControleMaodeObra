@@ -91,6 +91,11 @@ function ativarModoLivre() {
 }
 
 // --- CÉREBRO: DIGITOU MATRÍCULA ---
+txtOS.addEventListener('input', function() {
+    this.value = this.value.replace(/[^0-9]/g, '');
+    limparSelecaoAvulso();
+});
+
 txtMatricula.addEventListener('blur', async function() {
     // ✅ CORREÇÃO: Limpeza de espaços e zeros à esquerda
     const matriculaBruta = txtMatricula.value.trim();
@@ -283,6 +288,12 @@ window.confirmarContinuacao = async function() {
             created_at: new Date().toISOString()
         }]);
     }
+    apontamentosAnteriores = [];
+    executarSalvamento(1);
+}
+
+window.trabalharJuntos = function() {
+    document.getElementById('modalContinuacao').classList.add('hidden');
     apontamentosAnteriores = [];
     executarSalvamento(1);
 }

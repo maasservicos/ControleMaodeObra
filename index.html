@@ -47,7 +47,7 @@
                         id="txtOS"
                         maxlength="6"
                         inputmode="numeric"
-                        oninput="this.value = this.value.replace(/[^0-9]/g, ''); limparSelecaoAvulso();"
+                        oninput="this.value = this.value.replace(/[^0-9]/g, '')"
                         class="input-field"
                         placeholder="000000">
                 </div>
@@ -125,16 +125,19 @@
         <div class="modal-card">
             <div style="font-size:2.5rem; margin-bottom:0.75rem;">⚠️</div>
             <h2 style="margin-bottom:1rem; color:#92400e; font-weight:bold; font-size:1.1rem;">
-                Apontamento Anterior Encontrado
+                O.S. em Andamento por Outro Produtivo
             </h2>
             <p id="txtContinuacaoMsg" style="margin-bottom:1.5rem; color:#555; font-size:1rem; line-height:1.5;">
             </p>
-            <div style="display:flex; gap:1rem; justify-content:center;">
-                <button onclick="cancelarContinuacao()" class="btn btn-clean" style="background:#3d3d3d; color:white; height:45px; min-width:80px;">
-                    Não
+            <div style="display:flex; flex-direction:column; gap:0.75rem;">
+                <button onclick="confirmarContinuacao()" class="btn btn-green" style="height:45px;">
+                    ✂️ DERRUBAR
                 </button>
-                <button onclick="confirmarContinuacao()" class="btn btn-green" style="min-width:80px;">
-                    Sim
+                <button onclick="trabalharJuntos()" class="btn" style="background:#2563eb; color:white; height:45px;">
+                    🤝 TRABALHAR JUNTOS
+                </button>
+                <button onclick="cancelarContinuacao()" class="btn btn-clean" style="background:#3d3d3d; color:white; height:45px;">
+                    CANCELAR
                 </button>
             </div>
         </div>
