@@ -23,13 +23,14 @@ window.limparTela = function() {
     txtMatricula.value = "";
     txtOS.value = "";
     document.getElementById('lblNomeFuncionario').innerText = "";
-    
+
     // 2. Destrava a tela
     ativarModoLivre();
-    
+
     // 3. Limpa avisos e foca na matrícula
     listaApontamentos.innerHTML = "";
     cardAviso.classList.add('hidden');
+    limparSelecaoAvulso();
     txtMatricula.focus();
 }
 
@@ -64,9 +65,11 @@ function ativarModoLivre() {
     document.getElementById('divInicio').classList.remove('hidden');
     document.getElementById('divTrabalhando').classList.add('hidden');
     document.getElementById('divPausado').classList.add('hidden');
-    
+
     txtMatricula.readOnly = false;
     txtOS.disabled = false;
+    txtOS.readOnly = false;
+    txtOS.maxLength = 6;
     painelDados.disabled = false;
     cardAviso.classList.add('hidden');
 }
@@ -186,6 +189,16 @@ async function carregarLista() {
                     <td style="font-weight:bold; color:#111827;">${item.os}</td>
                     <td style="text-align:right;">
                         <span class="${badgeClass}">${texto}</span>
+                    </td>
+                    <td style="text-align:right; padding-left:0;">
+                        <button onclick="abrirModalExclusao('${item.id}', '${item.os}', '${hora}', '${texto}')"
+                            style="background:none; border:none; cursor:pointer; padding:0.3rem 0.4rem;
+                                border-radius:0.375rem; color:#9ca3af; transition:background 0.15s, color 0.15s;"
+                            onmouseover="this.style.background='#fee2e2'; this.style.color='#ef4444';"
+                            onmouseout="this.style.background='none'; this.style.color='#9ca3af';"
+                            title="Excluir apontamento">
+                            🗑️
+                        </button>
                     </td>
                 </tr>`;
         });
@@ -320,7 +333,7 @@ async function executarSalvamento(codigoStatus) {
         if (horasCalculadas) mensagem += `\nTempo: ${horasCalculadas}`;
         
         console.log("Sucesso! Mensagem:", mensagem);
-        mostrarAviso(mensagem, "Reiniciando...");
+        mostrarAviso(mensagem, "Apontando...");
         
         setTimeout(() => window.limparTela(), 3000);
     } else {
@@ -414,6 +427,172 @@ async function buscarApontamentosAbertosNaOS(os, matriculaAtual) {
     if (funcs) funcs.forEach(f => mapaFuncs[f.matricula] = f.nome);
 
     return abertos.map(a => ({ ...a, nome: mapaFuncs[a.matricula] || a.matricula }));
+}
+
+// --- SERVIÇO AVULSO ---
+
+let avulsoAtivoId = null;
+
+async function carregarServicosAvulsos() {
+    const { data } = await client
+        .from('ServicosAvulsos_Maas')
+        .select('id, nome')
+        .eq('ativo', true)
+        .order('nome');
+
+    const container = document.getElementById('listaServicosAvulsos');
+    container.innerHTML = '';
+
+    if (!data || data.length === 0) {
+        container.innerHTML = '<span style="font-size:0.75rem; color:#9ca3af;">Nenhum serviço cadastrado.</span>';
+        return;
+    }
+
+    data.forEach(item => {
+        const btn = document.createElement('button');
+        btn.id = `avulso-${item.id}`;
+        btn.innerText = item.nome;
+        btn.dataset.id = item.id;
+        btn.onclick = () => selecionarAvulso(item.id, item.nome);
+        btn.style.cssText = `
+            padding:0.375rem 0.875rem; border-radius:9999px; font-size:0.8rem;
+            font-weight:600; border:2px solid #e5e7eb; background:white;
+            color:#374151; cursor:pointer; font-family:inherit; transition:all 0.15s;
+        `;
+        container.appendChild(btn);
+    });
+}
+
+window.selecionarAvulso = function(id, nome) {
+    if (avulsoAtivoId === id) {
+        limparSelecaoAvulso();
+        return;
+    }
+
+    avulsoAtivoId = id;
+    txtOS.maxLength = 50;
+    txtOS.value = nome;
+    txtOS.readOnly = true;
+
+    document.querySelectorAll('[id^="avulso-"]').forEach(btn => {
+        btn.style.background = 'white';
+        btn.style.color = '#374151';
+        btn.style.borderColor = '#e5e7eb';
+    });
+
+    const btnAtivo = document.getElementById(`avulso-${id}`);
+    if (btnAtivo) {
+        btnAtivo.style.background = '#003366';
+        btnAtivo.style.color = 'white';
+        btnAtivo.style.borderColor = '#003366';
+    }
+}
+
+window.limparSelecaoAvulso = function() {
+    avulsoAtivoId = null;
+    txtOS.readOnly = false;
+    txtOS.maxLength = 6;
+
+    document.querySelectorAll('[id^="avulso-"]').forEach(btn => {
+        btn.style.background = 'white';
+        btn.style.color = '#374151';
+        btn.style.borderColor = '#e5e7eb';
+    });
+}
+
+carregarServicosAvulsos();
+
+// --- EXCLUSÃO DE APONTAMENTO ---
+
+let idParaExcluir = null;
+
+window.abrirModalExclusao = function(id, os, hora, status) {
+    idParaExcluir = id;
+
+    document.getElementById('modalExclusao_os').innerText = os;
+    document.getElementById('modalExclusao_hora').innerText = hora;
+    document.getElementById('modalExclusao_status').innerText = status;
+
+    document.getElementById('modalExclusao_matricula').value = '';
+    document.getElementById('modalExclusao_senha').value = '';
+    document.getElementById('modalExclusao_erro').innerText = '';
+    document.getElementById('modalExclusao_nome').innerText = '';
+
+    document.getElementById('modalExclusao').classList.remove('hidden');
+    document.getElementById('modalExclusao_matricula').focus();
+}
+
+document.getElementById('modalExclusao_matricula').addEventListener('blur', async function() {
+    const matricula = Number(this.value.trim()).toString();
+    const nomeEl = document.getElementById('modalExclusao_nome');
+
+    if (!matricula || matricula === '0') {
+        nomeEl.innerText = '';
+        return;
+    }
+
+    nomeEl.innerText = '🔍 Buscando...';
+    nomeEl.style.color = '#6b7280';
+
+    const { data: admin } = await client
+        .from('Admin_Maas')
+        .select('nome')
+        .eq('matricula', matricula)
+        .maybeSingle();
+
+    if (admin) {
+        nomeEl.innerText = `👤 ${admin.nome}`;
+        nomeEl.style.color = '#003366';
+    } else {
+        nomeEl.innerText = '❌ Matrícula não autorizada';
+        nomeEl.style.color = '#ef4444';
+    }
+});
+
+window.fecharModalExclusao = function() {
+    idParaExcluir = null;
+    document.getElementById('modalExclusao').classList.add('hidden');
+    document.getElementById('modalExclusao_nome').innerText = '';
+}
+
+window.confirmarExclusao = async function() {
+    const matricula = Number(document.getElementById('modalExclusao_matricula').value).toString();
+    const senha = document.getElementById('modalExclusao_senha').value.trim();
+    const erroEl = document.getElementById('modalExclusao_erro');
+
+    if (!matricula || !senha) {
+        erroEl.innerText = '⚠️ Preencha a matrícula e a senha.';
+        return;
+    }
+
+    // 1. Busca a matrícula na tabela de admins
+    const { data: admin } = await client
+        .from('Admin_Maas')
+        .select('senha')
+        .eq('matricula', matricula)
+        .maybeSingle();
+
+    // 2. Valida: matrícula inexistente ou senha errada
+    if (!admin || admin.senha !== senha) {
+        erroEl.innerText = '⚠️ Matrícula ou senha incorretos. Acesso negado.';
+        document.getElementById('modalExclusao_senha').value = '';
+        return;
+    }
+
+    // 3. Deleta o registro pelo id
+    const { error } = await client
+        .from('SistemaOS_Maas')
+        .delete()
+        .eq('id', idParaExcluir);
+
+    if (error) {
+        erroEl.innerText = '❌ Erro ao excluir: ' + error.message;
+        return;
+    }
+
+    // 4. Fecha o modal e recarrega a lista
+    fecharModalExclusao();
+    carregarLista();
 }
 
 // Busca O.S. em aberto (Peças ou Pausa) do colaborador, excluindo a O.S. atual
