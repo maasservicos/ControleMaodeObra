@@ -1,5 +1,15 @@
 import { client } from './supabaseClient.js';
 
+function esc(str) {
+    if (str == null) return '';
+    return String(str)
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#39;');
+}
+
 // Elementos
 const txtMatricula = document.getElementById('txtMatricula');
 const txtOS = document.getElementById('txtOS');
@@ -9,6 +19,12 @@ const listaApontamentos = document.getElementById('listaApontamentos');
 
 let statusPendente = null;
 let apontamentosAnteriores = [];
+
+listaApontamentos.addEventListener('click', function(e) {
+    const btn = e.target.closest('.btn-excluir-apontamento');
+    if (!btn) return;
+    abrirModalExclusao(btn.dataset.id, btn.dataset.os, btn.dataset.hora, btn.dataset.texto);
+});
 
 // --- FUNÇÕES AUXILIARES ---
 function mostrarAviso(titulo, detalhe) {
@@ -183,24 +199,29 @@ async function carregarLista() {
             if(item.status_cod == 6) { badgeClass = "badge badge-yellow"; texto = "Pausa"; }
             if(item.status_cod == 7) { badgeClass = "badge badge-red"; texto = "Saída"; }
 
-            listaApontamentos.innerHTML += `
-                <tr class="tr-hover">
-                    <td style="font-family:monospace; font-weight:500; color:#1f2937;">${hora}</td>
-                    <td style="font-weight:bold; color:#111827;">${item.os}</td>
-                    <td style="text-align:right;">
-                        <span class="${badgeClass}">${texto}</span>
-                    </td>
-                    <td style="text-align:right; padding-left:0;">
-                        <button onclick="abrirModalExclusao('${item.id}', '${item.os}', '${hora}', '${texto}')"
-                            style="background:none; border:none; cursor:pointer; padding:0.3rem 0.4rem;
-                                border-radius:0.375rem; color:#9ca3af; transition:background 0.15s, color 0.15s;"
-                            onmouseover="this.style.background='#fee2e2'; this.style.color='#ef4444';"
-                            onmouseout="this.style.background='none'; this.style.color='#9ca3af';"
-                            title="Excluir apontamento">
-                            🗑️
-                        </button>
-                    </td>
-                </tr>`;
+            const tr = document.createElement('tr');
+            tr.className = 'tr-hover';
+            tr.innerHTML = `
+                <td style="font-family:monospace; font-weight:500; color:#1f2937;">${esc(hora)}</td>
+                <td style="font-weight:bold; color:#111827;">${esc(item.os)}</td>
+                <td style="text-align:right;">
+                    <span class="${esc(badgeClass)}">${esc(texto)}</span>
+                </td>
+                <td style="text-align:right; padding-left:0;">
+                    <button class="btn-excluir-apontamento"
+                        data-id="${esc(String(item.id))}"
+                        data-os="${esc(item.os)}"
+                        data-hora="${esc(hora)}"
+                        data-texto="${esc(texto)}"
+                        style="background:none; border:none; cursor:pointer; padding:0.3rem 0.4rem;
+                            border-radius:0.375rem; color:#9ca3af; transition:background 0.15s, color 0.15s;"
+                        onmouseover="this.style.background='#fee2e2'; this.style.color='#ef4444';"
+                        onmouseout="this.style.background='none'; this.style.color='#9ca3af';"
+                        title="Excluir apontamento">
+                        🗑️
+                    </button>
+                </td>`;
+            listaApontamentos.appendChild(tr);
         });
     } else {
         if (osFiltro) listaApontamentos.innerHTML = `<tr><td colspan="3" style="text-align:center; padding:1rem; color:#9ca3af; font-size:0.75rem;">Nenhum registro para O.S. ${osFiltro}</td></tr>`;
@@ -565,34 +586,31 @@ window.confirmarExclusao = async function() {
         return;
     }
 
-    // 1. Busca a matrícula na tabela de admins
-    const { data: admin } = await client
-        .from('Admin_Maas')
-        .select('senha')
-        .eq('matricula', matricula)
-        .maybeSingle();
+    try {
+        const url = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/excluir-apontamento`;
+        const resp = await fetch(url, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'apikey': import.meta.env.VITE_SUPABASE_KEY,
+            },
+            body: JSON.stringify({ matricula, senha, id: idParaExcluir }),
+        });
 
-    // 2. Valida: matrícula inexistente ou senha errada
-    if (!admin || admin.senha !== senha) {
-        erroEl.innerText = '⚠️ Matrícula ou senha incorretos. Acesso negado.';
-        document.getElementById('modalExclusao_senha').value = '';
-        return;
+        const result = await resp.json();
+
+        if (!resp.ok) {
+            erroEl.innerText = `⚠️ ${result.error || 'Erro ao excluir.'}`;
+            document.getElementById('modalExclusao_senha').value = '';
+            return;
+        }
+
+        fecharModalExclusao();
+        carregarLista();
+
+    } catch {
+        document.getElementById('modalExclusao_erro').innerText = '❌ Erro de conexão. Tente novamente.';
     }
-
-    // 3. Deleta o registro pelo id
-    const { error } = await client
-        .from('SistemaOS_Maas')
-        .delete()
-        .eq('id', idParaExcluir);
-
-    if (error) {
-        erroEl.innerText = '❌ Erro ao excluir: ' + error.message;
-        return;
-    }
-
-    // 4. Fecha o modal e recarrega a lista
-    fecharModalExclusao();
-    carregarLista();
 }
 
 // Busca O.S. em aberto (Peças ou Pausa) do colaborador, excluindo a O.S. atual

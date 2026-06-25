@@ -1,5 +1,15 @@
 import { client } from './supabaseClient.js';
 
+function esc(str) {
+    if (str == null) return '';
+    return String(str)
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#39;');
+}
+
 // --- ELEMENTOS ---
 const tabela = document.getElementById('tabelaDashboard');
 const kpiTotal = document.getElementById('kpiTotal');
@@ -20,6 +30,14 @@ const tabelaHist = document.getElementById('tabelaHistorico');
 
 // Variáveis Globais
 let dadosBrutos = [];
+
+if (tabela) {
+    tabela.addEventListener('click', function(e) {
+        const btn = e.target.closest('.btn-icon-hist');
+        if (!btn) return;
+        verHistorico(btn.dataset.os);
+    });
+}
 let dadosResumidos = [];
 let mapaFuncionarios = {}; 
 let mapaHistoricoOS = {};
@@ -253,17 +271,17 @@ function renderizarTabelaPrincipal() {
 
             htmlLinhas += `
                 <tr class="tr-hover group">
-                    <td style="padding:1rem 1.5rem; font-family:monospace; font-size:0.75rem; color:#6b7280;">${dataFmt} ${hora}</td>
-                    <td style="padding:1rem 1.5rem; font-weight:bold; color:#374151;">${item.matricula}</td>
-                    <td style="padding:1rem 1.5rem; font-weight:500; color:#111827;">${nomeFunc}</td>
+                    <td style="padding:1rem 1.5rem; font-family:monospace; font-size:0.75rem; color:#6b7280;">${esc(dataFmt)} ${esc(hora)}</td>
+                    <td style="padding:1rem 1.5rem; font-weight:bold; color:#374151;">${esc(item.matricula)}</td>
+                    <td style="padding:1rem 1.5rem; font-weight:500; color:#111827;">${esc(nomeFunc)}</td>
                     <td style="padding:1rem 1.5rem; font-family:monospace; color:#2563eb; font-weight:bold; display:flex; align-items:center; gap:0.5rem;">
-                        ${item.os}
-                        <button onclick="verHistorico('${item.os}')" class="btn-icon-hist" title="Ver Histórico">📜</button>
+                        ${esc(item.os)}
+                        <button class="btn-icon-hist" data-os="${esc(item.os)}" title="Ver Histórico">📜</button>
                     </td>
-                    <td style="padding:1rem 1.5rem; text-align:right; font-family:monospace; font-weight:bold; color:#d97706;">${tempoFormatado}</td>
-                    <td style="padding:1rem 1.5rem; text-align:right; font-family:monospace; font-weight:bold; color:#059669;">${custoFormatado}</td>
+                    <td style="padding:1rem 1.5rem; text-align:right; font-family:monospace; font-weight:bold; color:#d97706;">${esc(tempoFormatado)}</td>
+                    <td style="padding:1rem 1.5rem; text-align:right; font-family:monospace; font-weight:bold; color:#059669;">${esc(custoFormatado)}</td>
                     <td style="padding:1rem 1.5rem; text-align:center;">
-                        <span class="${badgeClass}">${textoStatus}</span>
+                        <span class="${esc(badgeClass)}">${esc(textoStatus)}</span>
                     </td>
                 </tr>
             `;
@@ -319,9 +337,9 @@ window.verHistorico = async function(osAlvo) {
 
         linhasHist += `
             <tr style="border-bottom:1px solid #f3f4f6;">
-                <td style="padding:0.75rem 1rem; font-family:monospace; font-size:0.75rem; color:#6b7280;">${dh}</td>
-                <td style="padding:0.75rem 1rem; font-weight:bold; color:#374151;">${info.nome}</td>
-                <td style="padding:0.75rem 1rem; text-align:center; font-size:0.75rem; ${cor}">${txtStatus} (${item.status_cod})</td>
+                <td style="padding:0.75rem 1rem; font-family:monospace; font-size:0.75rem; color:#6b7280;">${esc(dh)}</td>
+                <td style="padding:0.75rem 1rem; font-weight:bold; color:#374151;">${esc(info.nome)}</td>
+                <td style="padding:0.75rem 1rem; text-align:center; font-size:0.75rem; ${esc(cor)}">${esc(txtStatus)} (${esc(String(item.status_cod))})</td>
             </tr>
         `;
     });

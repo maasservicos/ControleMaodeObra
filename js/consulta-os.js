@@ -1,5 +1,15 @@
 import { client } from './supabaseClient.js';
 
+function esc(str) {
+    if (str == null) return '';
+    return String(str)
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#39;');
+}
+
 const telaConsulta  = document.getElementById('telaConsulta');
 const telaLoading   = document.getElementById('telaLoading');
 const telaResultado = document.getElementById('telaResultado');
@@ -119,10 +129,10 @@ window.consultarOS = async function() {
 
             linhas += `
                 <tr>
-                    <td class="td-nome">${nome}</td>
-                    <td class="td-mono">${aberturaFmt}</td>
-                    <td class="td-mono">${fechamentoFmt}</td>
-                    <td class="td-horas">${horas}</td>
+                    <td class="td-nome">${esc(nome)}</td>
+                    <td class="td-mono">${esc(aberturaFmt)}</td>
+                    <td class="td-mono">${recFechamento ? esc(fechamentoFmt) : '<span class="em-aberto">Em Aberto</span>'}</td>
+                    <td class="td-horas">${esc(horas)}</td>
                 </tr>
             `;
         }
