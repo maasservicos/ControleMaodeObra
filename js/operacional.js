@@ -242,18 +242,24 @@ window.definirAcao = async function(codigoStatus) {
     }
 
     // Início de O.S: verifica se tem apontamento anterior em aberto na mesma OS
+    // Serviço Avulso é individual (não representa um job compartilhado por equipe), então pula essa checagem.
+    // Detecta pelo valor em si (O.S. numérica x texto de avulso), não por uma flag de sessão: o mecânico
+    // que volta digitando só a matrícula reaproveita o "os" que o sistema já preencheu sozinho, sem
+    // nunca ter clicado no chip nesta sessão.
     if (codigoStatus === 1) {
         const os = txtOS.value.trim().padStart(6, '0');
-        const matricula = Number(txtMatricula.value.trim()).toString();
-        const anteriores = await buscarApontamentosAbertosNaOS(os, matricula);
-        if (anteriores.length > 0) {
-            apontamentosAnteriores = anteriores;
-            const nomes = anteriores.map(a => a.nome).join(', ');
-            const plural = anteriores.length > 1 ? 'apontamentos anteriores' : 'apontamento anterior';
-            document.getElementById('txtContinuacaoMsg').innerText =
-                `Existe um ${plural} de ${nomes} nesta O.S. Deseja continuar o serviço?`;
-            document.getElementById('modalContinuacao').classList.remove('hidden');
-            return;
+        if (/^\d+$/.test(os)) {
+            const matricula = Number(txtMatricula.value.trim()).toString();
+            const anteriores = await buscarApontamentosAbertosNaOS(os, matricula);
+            if (anteriores.length > 0) {
+                apontamentosAnteriores = anteriores;
+                const nomes = anteriores.map(a => a.nome).join(', ');
+                const plural = anteriores.length > 1 ? 'apontamentos anteriores' : 'apontamento anterior';
+                document.getElementById('txtContinuacaoMsg').innerText =
+                    `Existe um ${plural} de ${nomes} nesta O.S. Deseja continuar o serviço?`;
+                document.getElementById('modalContinuacao').classList.remove('hidden');
+                return;
+            }
         }
         executarSalvamento(1);
         return;
@@ -498,12 +504,16 @@ async function carregarServicosAvulsos() {
 window.selecionarAvulso = function(id, nome) {
     if (avulsoAtivoId === id) {
         limparSelecaoAvulso();
+        txtOS.value = "";
         return;
     }
 
     avulsoAtivoId = id;
     txtOS.maxLength = 50;
-    txtOS.value = nome;
+    // Data no identificador: cada dia é tratado como uma "O.S." avulsa separada,
+    // evitando que horas e apontamentos de dias diferentes se misturem.
+    const dataHoje = new Date().toLocaleDateString('pt-BR');
+    txtOS.value = `${nome} - ${dataHoje}`;
     txtOS.readOnly = true;
 
     document.querySelectorAll('[id^="avulso-"]').forEach(btn => {

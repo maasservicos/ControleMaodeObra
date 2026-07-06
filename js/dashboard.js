@@ -27,6 +27,11 @@ const inpOS = document.getElementById('dashOS');
 const modalHist = document.getElementById('modalHistorico');
 const lblOSModal = document.getElementById('lblOSModal');
 const tabelaHist = document.getElementById('tabelaHistorico');
+const alertaErrosModal = document.getElementById('alertaErrosModal');
+const kpiErros = document.getElementById('kpiErros');
+
+// Limite de horas "em andamento" sem pausa para considerar apontamento suspeito
+const LIMITE_HORAS_ABERTO = 12;
 
 // Variáveis Globais
 let dadosBrutos = [];
@@ -39,8 +44,10 @@ if (tabela) {
     });
 }
 let dadosResumidos = [];
-let mapaFuncionarios = {}; 
+let mapaFuncionarios = {};
 let mapaHistoricoOS = {};
+let mapaErros = {};
+let osComErro = new Set();
 let filtroKPIAtual = 'TODOS';
 
 // --- INICIALIZAÇÃO ---
@@ -61,7 +68,7 @@ window.filtrarKPI = function(tipo) {
     filtroKPIAtual = tipo;
     resetarEstilosCards();
     
-    const mapIds = { 'TODOS': 'cardTotal', 'ANDAMENTO': 'cardAndamento', 'PAUSADAS': 'cardPausadas', 'FINALIZADAS': 'cardFinalizadas' };
+    const mapIds = { 'TODOS': 'cardTotal', 'ANDAMENTO': 'cardAndamento', 'PAUSADAS': 'cardPausadas', 'FINALIZADAS': 'cardFinalizadas', 'ERROS': 'cardErros' };
     const cardId = mapIds[tipo];
     
     const el = document.getElementById(cardId);
@@ -74,7 +81,7 @@ window.filtrarKPI = function(tipo) {
 }
 
 function resetarEstilosCards() {
-    ['cardTotal', 'cardAndamento', 'cardPausadas', 'cardFinalizadas'].forEach(id => {
+    ['cardTotal', 'cardAndamento', 'cardPausadas', 'cardFinalizadas', 'cardErros'].forEach(id => {
         const el = document.getElementById(id);
         if (el) el.classList.remove('active');
     });
@@ -148,6 +155,86 @@ function processarDados() {
     });
 
     dadosResumidos = Array.from(mapaUnico.values());
+    processarErros();
+}
+
+// O.S. numérica de verdade (ex: "036849"), diferente de um Serviço Avulso (ex: "SEINFRA - 06/07/2026")
+function ehOSNumerica(os) {
+    return /^\d+$/.test(String(os).trim());
+}
+
+// --- DETECÇÃO DE APONTAMENTOS SUSPEITOS ---
+// Reaplica a mesma máquina de estados de calcularMetricasMO (entrada aberta/fechada),
+// mas em vez de somar tempo, sinaliza transições que não deveriam acontecer.
+function detectarInconsistencias(historicoOrdenado) {
+    const erros = [];
+    if (!historicoOrdenado || historicoOrdenado.length === 0) return erros;
+
+    const osRef = historicoOrdenado[0].os;
+    const matriculaRef = historicoOrdenado[0].matricula;
+    const nomesFechamento = { 2: 'Peças', 3: 'Intervalo', 5: 'Término', 6: 'Pausa', 7: 'Fim de Expediente' };
+    const osNumerica = ehOSNumerica(osRef);
+
+    let entrada = null;
+    let finalizado = false;
+
+    historicoOrdenado.forEach(registro => {
+        const st = Number(registro.status_cod);
+        const dataReg = new Date(registro.created_at);
+
+        // Serviço Avulso pode ter várias rodadas (Início > Término > Início de novo) no mesmo dia — isso é normal.
+        // Só se aplica a O.S. numéricas de verdade, que representam um único job.
+        if (finalizado && osNumerica) {
+            erros.push({ item: registro, os: osRef, matricula: matriculaRef, motivo: 'Apontamento registrado após o Término da O.S.' });
+        }
+
+        if (st === 1 || st === 4) {
+            if (entrada) {
+                const rotulo = st === 1 ? 'Início' : 'Retorno';
+                erros.push({ item: registro, os: osRef, matricula: matriculaRef, motivo: `${rotulo} apontado em duplicidade, sem pausa/término do período anterior` });
+            }
+            entrada = dataReg;
+        } else if (st === 2 || st === 3 || st === 5 || st === 6 || st === 7) {
+            if (!entrada) {
+                erros.push({ item: registro, os: osRef, matricula: matriculaRef, motivo: `${nomesFechamento[st]} apontado sem Início/Retorno anterior` });
+            } else {
+                const horasAberto = (dataReg - entrada) / (1000 * 60 * 60);
+                if (horasAberto > LIMITE_HORAS_ABERTO) {
+                    erros.push({ item: registro, os: osRef, matricula: matriculaRef, motivo: `Ficou ${horasAberto.toFixed(1)}h em andamento sem pausa (limite ${LIMITE_HORAS_ABERTO}h)` });
+                }
+            }
+            entrada = null;
+            // "Encerrado por continuidade" é um handoff administrativo (outro colaborador assumiu a O.S.),
+            // não uma finalização real do job — não deve travar uma reabertura legítima depois.
+            if (st === 5 && registro.obs !== 'Encerrado por continuidade') finalizado = true;
+        }
+    });
+
+    // Ainda em aberto (sem pausa/término) até agora
+    if (entrada && !finalizado) {
+        const horasAberto = (new Date() - entrada) / (1000 * 60 * 60);
+        if (horasAberto > LIMITE_HORAS_ABERTO) {
+            erros.push({ item: null, os: osRef, matricula: matriculaRef, motivo: `Em andamento há ${horasAberto.toFixed(1)}h sem pausa/finalização (limite ${LIMITE_HORAS_ABERTO}h)` });
+        }
+    }
+
+    return erros;
+}
+
+function processarErros() {
+    mapaErros = {};
+    const novoOsComErro = new Set();
+
+    Object.keys(mapaHistoricoOS).forEach(chave => {
+        const historico = [...mapaHistoricoOS[chave]].sort((a, b) => new Date(a.created_at) - new Date(b.created_at));
+        const erros = detectarInconsistencias(historico);
+        if (erros.length > 0) {
+            mapaErros[chave] = erros;
+            novoOsComErro.add(String(erros[0].os));
+        }
+    });
+
+    osComErro = novoOsComErro;
 }
 
 
@@ -189,7 +276,7 @@ function calcularMetricasMO(matricula, os) {
 
 function calcularKPIs() {
     if (!dadosBrutos.length) {
-        atualizarKPIs(0,0,0,0);
+        atualizarKPIs(0,0,0,0,0);
         return;
     }
 
@@ -215,7 +302,7 @@ function calcularKPIs() {
         else if (todosFinalizados) countFinalizadas++;
     }
 
-    atualizarKPIs(totalOSUnicas, countAndamento, countPausadas, countFinalizadas);
+    atualizarKPIs(totalOSUnicas, countAndamento, countPausadas, countFinalizadas, osComErro.size);
 }
 
 // COPIE DAQUI 👇
@@ -239,16 +326,23 @@ function renderizarTabelaPrincipal() {
         else if (filtroKPIAtual === 'ANDAMENTO' && (st === 1 || st === 4)) mostrar = true;
         else if (filtroKPIAtual === 'PAUSADAS' && (st === 2 || st === 3 || st === 6)) mostrar = true;
         else if (filtroKPIAtual === 'FINALIZADAS' && (st === 5 || st === 7)) mostrar = true;
+        else if (filtroKPIAtual === 'ERROS' && osComErro.has(String(item.os))) mostrar = true;
 
         if (mostrar) {
             temDado = true;
-            
+
             const dataObj = new Date(item.created_at);
             const hora = dataObj.toLocaleTimeString('pt-BR', {hour:'2-digit', minute:'2-digit'});
             const dataFmt = dataObj.toLocaleDateString('pt-BR');
-            
+
             const infoFunc = mapaFuncionarios[item.matricula] || { nome: "Desconhecido", valor: 0 };
             const nomeFunc = infoFunc.nome;
+
+            const chaveIndex = `${item.os}-${item.matricula}`;
+            const errosItem = mapaErros[chaveIndex];
+            const alertaHtml = errosItem
+                ? `<span class="icon-alerta" title="${esc(errosItem.map(e => e.motivo).join(' | '))}">⚠️</span>`
+                : '';
 
             const metricas = calcularMetricasMO(item.matricula, item.os);
             const custoFormatado = metricas.custoTotal.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
@@ -275,6 +369,7 @@ function renderizarTabelaPrincipal() {
                     <td style="padding:1rem 1.5rem; font-weight:bold; color:#374151;">${esc(item.matricula)}</td>
                     <td style="padding:1rem 1.5rem; font-weight:500; color:#111827;">${esc(nomeFunc)}</td>
                     <td style="padding:1rem 1.5rem; font-family:monospace; color:#2563eb; font-weight:bold; display:flex; align-items:center; gap:0.5rem;">
+                        ${alertaHtml}
                         ${esc(item.os)}
                         <button class="btn-icon-hist" data-os="${esc(item.os)}" title="Ver Histórico">📜</button>
                     </td>
@@ -295,16 +390,18 @@ function renderizarTabelaPrincipal() {
     }
 }
 
-function atualizarKPIs(t, a, p, f) {
+function atualizarKPIs(t, a, p, f, e) {
     if(kpiTotal) kpiTotal.innerText = t;
     if(kpiAndamento) kpiAndamento.innerText = a;
     if(kpiPausadas) kpiPausadas.innerText = p;
     if(kpiFinalizadas) kpiFinalizadas.innerText = f;
+    if(kpiErros) kpiErros.innerText = e;
 }
 
 window.verHistorico = async function(osAlvo) {
     if(lblOSModal) lblOSModal.innerText = osAlvo;
     if(tabelaHist) tabelaHist.innerHTML = '<tr><td colspan="3" style="padding:1rem; text-align:center; color:#9ca3af;">Carregando...</td></tr>';
+    if(alertaErrosModal) { alertaErrosModal.innerHTML = ''; alertaErrosModal.classList.add('hidden'); }
     if(modalHist) modalHist.classList.add('open');
 
     const { data: historicoOS, error } = await client
@@ -316,6 +413,36 @@ window.verHistorico = async function(osAlvo) {
     if(error || !historicoOS || historicoOS.length === 0) {
         if(tabelaHist) tabelaHist.innerHTML = '<tr><td colspan="3" style="padding:1rem; text-align:center; color:#9ca3af;">Nenhum registro encontrado.</td></tr>';
         return;
+    }
+
+    // Valida cada colaborador separadamente (a máquina de estados é por matrícula)
+    const porMatricula = {};
+    historicoOS.forEach(item => {
+        if (!porMatricula[item.matricula]) porMatricula[item.matricula] = [];
+        porMatricula[item.matricula].push(item);
+    });
+
+    const motivoPorItem = new Map();
+    const motivosGerais = [];
+
+    Object.keys(porMatricula).forEach(matricula => {
+        const historicoOrdenado = [...porMatricula[matricula]].sort((a, b) => new Date(a.created_at) - new Date(b.created_at));
+        const erros = detectarInconsistencias(historicoOrdenado);
+        erros.forEach(erro => {
+            const nomeColab = mapaFuncionarios[matricula]?.nome || matricula;
+            motivosGerais.push(`${nomeColab}: ${erro.motivo}`);
+            if (erro.item) motivoPorItem.set(erro.item, erro.motivo);
+        });
+    });
+
+    if (alertaErrosModal) {
+        if (motivosGerais.length > 0) {
+            alertaErrosModal.innerHTML = `⚠️ <strong>${motivosGerais.length} possível(is) apontamento(s) com erro:</strong><ul>${motivosGerais.map(m => `<li>${esc(m)}</li>`).join('')}</ul>`;
+            alertaErrosModal.classList.remove('hidden');
+        } else {
+            alertaErrosModal.innerHTML = '';
+            alertaErrosModal.classList.add('hidden');
+        }
     }
 
     let linhasHist = '';
@@ -335,11 +462,16 @@ window.verHistorico = async function(osAlvo) {
         if(item.status_cod == 6) { txtStatus="Pausa"; cor="color:#2563eb; font-weight:bold;"; }
         if(item.status_cod == 7) { txtStatus="Fim Expediente"; cor="color:#FF0000; font-weight:bold;"; }
 
+        const motivoErro = motivoPorItem.get(item);
+        const alertaLinha = motivoErro
+            ? `<br><span style="color:#dc2626; font-size:0.65rem;">⚠️ ${esc(motivoErro)}</span>`
+            : '';
+
         linhasHist += `
-            <tr style="border-bottom:1px solid #f3f4f6;">
+            <tr style="border-bottom:1px solid #f3f4f6; ${motivoErro ? 'background-color:#fef2f2;' : ''}">
                 <td style="padding:0.75rem 1rem; font-family:monospace; font-size:0.75rem; color:#6b7280;">${esc(dh)}</td>
                 <td style="padding:0.75rem 1rem; font-weight:bold; color:#374151;">${esc(info.nome)}</td>
-                <td style="padding:0.75rem 1rem; text-align:center; font-size:0.75rem; ${esc(cor)}">${esc(txtStatus)} (${esc(String(item.status_cod))})</td>
+                <td style="padding:0.75rem 1rem; text-align:center; font-size:0.75rem; ${esc(cor)}">${esc(txtStatus)} (${esc(String(item.status_cod))})${alertaLinha}</td>
             </tr>
         `;
     });
@@ -415,6 +547,86 @@ window.exportarExcelDashboard = async function() {
         alert("Erro ao criar o Excel. Veja o console (F12).");
     } finally {
         // Restaura o botão
+        btn.innerHTML = txtOriginal;
+        btn.disabled = false;
+    }
+}
+
+// --- EXCEL DETALHADO (TODOS OS APONTAMENTOS, LINHA A LINHA) ---
+window.exportarExcelDetalhado = async function() {
+    const btn = document.querySelector('button[onclick="exportarExcelDetalhado()"]');
+    const txtOriginal = btn.innerHTML;
+
+    btn.innerHTML = `⏳ Gerando...`;
+    btn.disabled = true;
+
+    try {
+        if (!dadosBrutos || dadosBrutos.length === 0) {
+            alert("Nada para exportar. Filtre os dados primeiro.");
+            return;
+        }
+
+        const tradutorStatus = {
+            1:"INÍCIO", 2:"PEÇAS", 3:"INTERVALO",
+            4:"RETORNO", 5:"FINALIZADO", 6:"PAUSA", 7:"FIM EXPEDIENTE"
+        };
+
+        // Ordena por O.S. > Matrícula > Data/Hora, para ler a sequência completa de cada apontamento
+        const ordenado = [...dadosBrutos].sort((a, b) => {
+            const cmpOS = String(a.os).localeCompare(String(b.os), undefined, { numeric: true });
+            if (cmpOS !== 0) return cmpOS;
+            const cmpMat = String(a.matricula).localeCompare(String(b.matricula), undefined, { numeric: true });
+            if (cmpMat !== 0) return cmpMat;
+            return new Date(a.created_at) - new Date(b.created_at);
+        });
+
+        const dadosFormatados = ordenado.map(item => {
+            const dataObj = new Date(item.created_at);
+            const info = mapaFuncionarios[item.matricula] || { nome: "N/D" };
+            const chaveIndex = `${item.os}-${item.matricula}`;
+            const errosDoItem = mapaErros[chaveIndex];
+            const motivoDoItem = errosDoItem?.find(e => e.item === item)?.motivo || '';
+
+            return {
+                "O.S.": item.os,
+                "Matrícula": item.matricula,
+                "Colaborador": info.nome,
+                "Data": dataObj.toLocaleDateString(),
+                "Hora": dataObj.toLocaleTimeString(),
+                "Status": tradutorStatus[item.status_cod] || item.status_cod,
+                "Alerta": motivoDoItem
+            };
+        });
+
+        const ws = XLSX.utils.json_to_sheet(dadosFormatados);
+        const wb = XLSX.utils.book_new();
+        XLSX.utils.book_append_sheet(wb, ws, "Apontamentos_Detalhado");
+
+        // Segunda aba: resumo só das O.S./colaboradores com inconsistência
+        const resumoErros = [];
+        Object.values(mapaErros).forEach(erros => {
+            erros.forEach(e => {
+                const info = mapaFuncionarios[e.matricula] || { nome: "N/D" };
+                resumoErros.push({
+                    "O.S.": e.os,
+                    "Matrícula": e.matricula,
+                    "Colaborador": info.nome,
+                    "Inconsistência": e.motivo
+                });
+            });
+        });
+
+        if (resumoErros.length > 0) {
+            const ws2 = XLSX.utils.json_to_sheet(resumoErros);
+            XLSX.utils.book_append_sheet(wb, ws2, "OS_Com_Erro");
+        }
+
+        XLSX.writeFile(wb, `Relatorio_Detalhado_Maas_${new Date().toLocaleDateString().replace(/\//g, '-')}.xlsx`);
+
+    } catch (erro) {
+        console.error("Erro no Excel Detalhado:", erro);
+        alert("Erro ao criar o Excel detalhado. Veja o console (F12).");
+    } finally {
         btn.innerHTML = txtOriginal;
         btn.disabled = false;
     }
