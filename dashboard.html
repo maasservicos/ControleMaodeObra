@@ -28,6 +28,7 @@
             <div class="header-right">
                 <a href="index.html" class="nav-link">Ir para Operacional &rarr;</a>
                 <a href="consulta-os.html" class="nav-link">Consultar O.S &rarr;</a>
+                <a href="funcionarios.html" class="nav-link">Funcionários &rarr;</a>
                 <div class="status-pill">
                     <span class="status-dot animate-pulse"></span>
                     <span class="status-text">Online</span>
@@ -174,6 +175,7 @@
                             <th class="px-4 py-3">Data/Hora</th>
                             <th class="px-4 py-3">Colaborador</th>
                             <th class="px-4 py-3 text-center">Ação</th>
+                            <th class="px-4 py-3 text-center">Editar/Excluir</th>
                         </tr>
                     </thead>
                     <tbody id="tabelaHistorico">
@@ -186,7 +188,86 @@
             </div>
         </div>
     </div>
-    
+
+    <!-- MODAL EDITAR APONTAMENTO -->
+    <div id="modalEditarApontamento" class="modal-overlay">
+        <div class="modal-card" style="max-width: 26rem; text-align:left;">
+            <div class="modal-header">
+                <h3 style="font-weight: bold; font-size: 1.125rem;">✏️ Editar Apontamento</h3>
+                <button onclick="fecharModalEditar()" class="btn-close-modal">✕</button>
+            </div>
+            <div style="padding: 1.25rem;">
+                <input type="hidden" id="editar_id">
+
+                <div class="input-group" style="display:block; margin-bottom:0.75rem;">
+                    <label class="input-label">Status</label>
+                    <select id="editar_status" class="input-field" style="width:100%;">
+                        <option value="1">Início</option>
+                        <option value="2">Peças</option>
+                        <option value="3">Intervalo</option>
+                        <option value="4">Retorno</option>
+                        <option value="5">Término</option>
+                        <option value="6">Pausa</option>
+                        <option value="7">Fim de Expediente</option>
+                    </select>
+                </div>
+                <div class="input-group" style="display:block; margin-bottom:0.75rem;">
+                    <label class="input-label">Data/hora</label>
+                    <input type="datetime-local" id="editar_data" class="input-field" style="width:100%;">
+                </div>
+                <div class="input-group" style="display:block; margin-bottom:1rem;">
+                    <label class="input-label">Observação</label>
+                    <input type="text" id="editar_obs" class="input-field" style="width:100%;">
+                </div>
+
+                <hr style="border:none; border-top:1px solid var(--gray-200); margin-bottom:1rem;">
+
+                <div class="input-group" style="display:block; margin-bottom:0.75rem;">
+                    <label class="input-label">Matrícula (admin)</label>
+                    <input type="number" id="editar_admin_matricula" class="input-field" style="width:100%;">
+                </div>
+                <div class="input-group" style="display:block;">
+                    <label class="input-label">Senha (admin)</label>
+                    <input type="password" id="editar_admin_senha" class="input-field" style="width:100%;">
+                </div>
+
+                <p id="editar_erro" style="color:#ef4444; font-size:0.8rem; min-height:1.1rem; margin-top:0.75rem;"></p>
+            </div>
+            <div style="padding: 1rem; background-color: var(--gray-50); border-top: 1px solid var(--gray-200); text-align: right; display:flex; gap:0.5rem; justify-content:flex-end;">
+                <button onclick="fecharModalEditar()" class="btn btn-clean">Cancelar</button>
+                <button onclick="salvarEdicaoApontamento()" class="btn btn-primary">Salvar</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- MODAL EXCLUIR APONTAMENTO (DASHBOARD) -->
+    <div id="modalExcluirApontamentoDash" class="modal-overlay">
+        <div class="modal-card" style="max-width: 24rem; text-align:left;">
+            <div class="modal-header" style="background:#991b1b;">
+                <h3 style="font-weight: bold; font-size: 1.125rem;">🗑️ Excluir Apontamento</h3>
+                <button onclick="fecharModalExcluirDash()" class="btn-close-modal">✕</button>
+            </div>
+            <div style="padding: 1.25rem;">
+                <p style="font-size:0.85rem; color:#374151; margin-bottom:1rem;">Confirme sua identidade de admin para excluir este apontamento.</p>
+
+                <div class="input-group" style="display:block; margin-bottom:0.75rem;">
+                    <label class="input-label">Matrícula (admin)</label>
+                    <input type="number" id="excluirDash_matricula" class="input-field" style="width:100%;">
+                </div>
+                <div class="input-group" style="display:block;">
+                    <label class="input-label">Senha (admin)</label>
+                    <input type="password" id="excluirDash_senha" class="input-field" style="width:100%;">
+                </div>
+
+                <p id="excluirDash_erro" style="color:#ef4444; font-size:0.8rem; min-height:1.1rem; margin-top:0.75rem;"></p>
+            </div>
+            <div style="padding: 1rem; background-color: var(--gray-50); border-top: 1px solid var(--gray-200); text-align: right; display:flex; gap:0.5rem; justify-content:flex-end;">
+                <button onclick="fecharModalExcluirDash()" class="btn btn-clean">Cancelar</button>
+                <button onclick="confirmarExclusaoDash()" class="btn" style="background:#991b1b; color:white;">Excluir</button>
+            </div>
+        </div>
+    </div>
+
     <script type="module" src="js/dashboard.js"></script>
     <footer>
         <span style="font-weight: 600; color: #6b7280;">Versão 1.00-Homolog</span>

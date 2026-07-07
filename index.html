@@ -34,11 +34,19 @@
                 <span id="msgAvisoDetalhe">Detalhe</span>
             </div>
 
+            <div id="cardErroApontamento" class="hidden" style="background:#fff1f2; border:2px solid #fecdd3; border-radius:0.75rem; padding:1rem; margin-bottom:1rem;">
+                <div style="font-weight:800; color:#991b1b; margin-bottom:0.5rem;">⚠️ Apontamento com erro encontrado</div>
+                <ul id="listaErrosApontamento" style="font-size:0.8rem; color:#7f1d1d; margin:0 0 0.75rem 1.1rem; padding:0;"></ul>
+                <button onclick="abrirModalCorrecao()" class="btn btn-lg" style="background:#991b1b; color:white;">
+                    🛠️ Corrigir Apontamento
+                </button>
+            </div>
+
             <div id="painelDados">
                 <div style="margin-bottom: 1rem;">
                     <label class="input-label">Matrícula</label>
                     <input type="number" id="txtMatricula" class="input-field" placeholder="Digite...">
-                    <div id="lblNomeFuncionario" class="msg-feedback"></div>
+                    <div id="lblNomeFuncionario" class="msg-feedback" style=" display: flex; justify-content: center;"></div>
                 </div>
 
                 <div style="margin-bottom: 1rem;">
@@ -217,6 +225,45 @@
                 <button onclick="confirmarExclusao()"
                     style="flex:1; padding:0.75rem; border-radius:0.625rem; font-weight:700; font-size:0.875rem; font-family:inherit; border:none; cursor:pointer; background:#ef4444; color:white;">
                     Excluir
+                </button>
+            </div>
+
+        </div>
+    </div>
+
+    <!-- MODAL DE CORREÇÃO DE ERRO -->
+    <div id="modalCorrecao" class="modal-overlay hidden">
+        <div class="modal-card" style="padding:0; text-align:left; max-width:480px;">
+
+            <div style="background:#fff1f2; border-bottom:1px solid #fecdd3; padding:1.25rem 1.5rem; border-radius:12px 12px 0 0; display:flex; align-items:center; gap:0.75rem;">
+                <div style="width:2.5rem; height:2.5rem; background:#fee2e2; border-radius:50%; display:flex; align-items:center; justify-content:center; font-size:1.1rem; flex-shrink:0;">🛠️</div>
+                <div>
+                    <div style="font-size:1rem; font-weight:700; color:#991b1b;">Corrigir Apontamento</div>
+                    <div style="font-size:0.75rem; color:#b91c1c; margin-top:0.1rem;">Requer senha de admin para cada correção</div>
+                </div>
+            </div>
+
+            <div style="padding:1.25rem 1.5rem 0;">
+                <div style="margin-bottom:0.75rem;">
+                    <label style="display:block; font-size:0.7rem; font-weight:700; color:#6b7280; text-transform:uppercase; letter-spacing:0.07em; margin-bottom:0.375rem;">Matrícula (admin)</label>
+                    <input id="modalCorrecao_matricula" type="number" placeholder="000"
+                        style="width:100%; border:2px solid #e5e7eb; border-radius:0.5rem; padding:0.625rem 0.875rem; font-size:1rem; font-weight:600; outline:none; font-family:inherit; color:#1f2937; background:#f9fafb; text-align:center;">
+                </div>
+                <div style="margin-bottom:1rem;">
+                    <label style="display:block; font-size:0.7rem; font-weight:700; color:#6b7280; text-transform:uppercase; letter-spacing:0.07em; margin-bottom:0.375rem;">Senha (admin)</label>
+                    <input id="modalCorrecao_senha" type="password" placeholder="••••••"
+                        style="width:100%; border:2px solid #e5e7eb; border-radius:0.5rem; padding:0.625rem 0.875rem; font-size:1rem; font-weight:600; outline:none; font-family:inherit; color:#1f2937; background:#f9fafb; text-align:center;">
+                </div>
+
+                <div id="listaCorrecoes" style="display:flex; flex-direction:column; gap:0.6rem; margin-bottom:0.5rem;"></div>
+
+                <div id="modalCorrecao_erro" style="font-size:0.75rem; color:#ef4444; font-weight:600; text-align:center; min-height:1.25rem; margin-top:0.25rem;"></div>
+            </div>
+
+            <div style="padding:1rem 1.5rem 1.5rem;">
+                <button onclick="fecharModalCorrecao()"
+                    style="width:100%; padding:0.75rem; border-radius:0.625rem; font-weight:700; font-size:0.875rem; font-family:inherit; border:none; cursor:pointer; background:#f3f4f6; color:#374151;">
+                    Fechar
                 </button>
             </div>
 

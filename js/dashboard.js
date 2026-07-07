@@ -1,4 +1,5 @@
 import { client } from './supabaseClient.js';
+import { detectarInconsistencias, isoParaDatetimeLocalBRT, datetimeLocalBRTParaISO } from './erros.js';
 
 function esc(str) {
     if (str == null) return '';
@@ -30,9 +31,6 @@ const tabelaHist = document.getElementById('tabelaHistorico');
 const alertaErrosModal = document.getElementById('alertaErrosModal');
 const kpiErros = document.getElementById('kpiErros');
 
-// Limite de horas "em andamento" sem pausa para considerar apontamento suspeito
-const LIMITE_HORAS_ABERTO = 12;
-
 // Variáveis Globais
 let dadosBrutos = [];
 
@@ -49,6 +47,20 @@ let mapaHistoricoOS = {};
 let mapaErros = {};
 let osComErro = new Set();
 let filtroKPIAtual = 'TODOS';
+
+// Edição/exclusão de apontamento a partir do modal de histórico
+let osAtualModal = null;
+let historicoAtualPorId = new Map();
+let idParaExcluirDash = null;
+
+if (tabelaHist) {
+    tabelaHist.addEventListener('click', function(e) {
+        const btnEditar = e.target.closest('.btn-editar-hist');
+        if (btnEditar) { abrirModalEditar(btnEditar.dataset.id); return; }
+        const btnExcluir = e.target.closest('.btn-excluir-hist');
+        if (btnExcluir) { abrirModalExcluirDash(btnExcluir.dataset.id); return; }
+    });
+}
 
 // --- INICIALIZAÇÃO ---
 window.addEventListener('DOMContentLoaded', () => {
@@ -110,8 +122,11 @@ window.carregarDashboard = async function() {
         }
 
         // 2. Busca Histórico
+        // Exclui registros marcados como excluido_dashboard (duplo-clique, testes):
+        // permanecem no banco, só não aparecem aqui.
         let query = client.from('SistemaOS_Maas')
             .select('*')
+            .eq('excluido_dashboard', false)
             .order('created_at', { ascending: false });
 
         if (inicio) query = query.gte('created_at', inicio + ' 00:00:00');
@@ -156,69 +171,6 @@ function processarDados() {
 
     dadosResumidos = Array.from(mapaUnico.values());
     processarErros();
-}
-
-// O.S. numérica de verdade (ex: "036849"), diferente de um Serviço Avulso (ex: "SEINFRA - 06/07/2026")
-function ehOSNumerica(os) {
-    return /^\d+$/.test(String(os).trim());
-}
-
-// --- DETECÇÃO DE APONTAMENTOS SUSPEITOS ---
-// Reaplica a mesma máquina de estados de calcularMetricasMO (entrada aberta/fechada),
-// mas em vez de somar tempo, sinaliza transições que não deveriam acontecer.
-function detectarInconsistencias(historicoOrdenado) {
-    const erros = [];
-    if (!historicoOrdenado || historicoOrdenado.length === 0) return erros;
-
-    const osRef = historicoOrdenado[0].os;
-    const matriculaRef = historicoOrdenado[0].matricula;
-    const nomesFechamento = { 2: 'Peças', 3: 'Intervalo', 5: 'Término', 6: 'Pausa', 7: 'Fim de Expediente' };
-    const osNumerica = ehOSNumerica(osRef);
-
-    let entrada = null;
-    let finalizado = false;
-
-    historicoOrdenado.forEach(registro => {
-        const st = Number(registro.status_cod);
-        const dataReg = new Date(registro.created_at);
-
-        // Serviço Avulso pode ter várias rodadas (Início > Término > Início de novo) no mesmo dia — isso é normal.
-        // Só se aplica a O.S. numéricas de verdade, que representam um único job.
-        if (finalizado && osNumerica) {
-            erros.push({ item: registro, os: osRef, matricula: matriculaRef, motivo: 'Apontamento registrado após o Término da O.S.' });
-        }
-
-        if (st === 1 || st === 4) {
-            if (entrada) {
-                const rotulo = st === 1 ? 'Início' : 'Retorno';
-                erros.push({ item: registro, os: osRef, matricula: matriculaRef, motivo: `${rotulo} apontado em duplicidade, sem pausa/término do período anterior` });
-            }
-            entrada = dataReg;
-        } else if (st === 2 || st === 3 || st === 5 || st === 6 || st === 7) {
-            if (!entrada) {
-                erros.push({ item: registro, os: osRef, matricula: matriculaRef, motivo: `${nomesFechamento[st]} apontado sem Início/Retorno anterior` });
-            } else {
-                const horasAberto = (dataReg - entrada) / (1000 * 60 * 60);
-                if (horasAberto > LIMITE_HORAS_ABERTO) {
-                    erros.push({ item: registro, os: osRef, matricula: matriculaRef, motivo: `Ficou ${horasAberto.toFixed(1)}h em andamento sem pausa (limite ${LIMITE_HORAS_ABERTO}h)` });
-                }
-            }
-            entrada = null;
-            // "Encerrado por continuidade" é um handoff administrativo (outro colaborador assumiu a O.S.),
-            // não uma finalização real do job — não deve travar uma reabertura legítima depois.
-            if (st === 5 && registro.obs !== 'Encerrado por continuidade') finalizado = true;
-        }
-    });
-
-    // Ainda em aberto (sem pausa/término) até agora
-    if (entrada && !finalizado) {
-        const horasAberto = (new Date() - entrada) / (1000 * 60 * 60);
-        if (horasAberto > LIMITE_HORAS_ABERTO) {
-            erros.push({ item: null, os: osRef, matricula: matriculaRef, motivo: `Em andamento há ${horasAberto.toFixed(1)}h sem pausa/finalização (limite ${LIMITE_HORAS_ABERTO}h)` });
-        }
-    }
-
-    return erros;
 }
 
 function processarErros() {
@@ -399,8 +351,9 @@ function atualizarKPIs(t, a, p, f, e) {
 }
 
 window.verHistorico = async function(osAlvo) {
+    osAtualModal = osAlvo;
     if(lblOSModal) lblOSModal.innerText = osAlvo;
-    if(tabelaHist) tabelaHist.innerHTML = '<tr><td colspan="3" style="padding:1rem; text-align:center; color:#9ca3af;">Carregando...</td></tr>';
+    if(tabelaHist) tabelaHist.innerHTML = '<tr><td colspan="4" style="padding:1rem; text-align:center; color:#9ca3af;">Carregando...</td></tr>';
     if(alertaErrosModal) { alertaErrosModal.innerHTML = ''; alertaErrosModal.classList.add('hidden'); }
     if(modalHist) modalHist.classList.add('open');
 
@@ -408,10 +361,11 @@ window.verHistorico = async function(osAlvo) {
         .from('SistemaOS_Maas')
         .select('*')
         .eq('os', osAlvo)
+        .eq('excluido_dashboard', false)
         .order('created_at', { ascending: true });
 
     if(error || !historicoOS || historicoOS.length === 0) {
-        if(tabelaHist) tabelaHist.innerHTML = '<tr><td colspan="3" style="padding:1rem; text-align:center; color:#9ca3af;">Nenhum registro encontrado.</td></tr>';
+        if(tabelaHist) tabelaHist.innerHTML = '<tr><td colspan="4" style="padding:1rem; text-align:center; color:#9ca3af;">Nenhum registro encontrado.</td></tr>';
         return;
     }
 
@@ -446,7 +400,9 @@ window.verHistorico = async function(osAlvo) {
     }
 
     let linhasHist = '';
+    historicoAtualPorId = new Map();
     historicoOS.forEach(item => {
+        historicoAtualPorId.set(String(item.id), item);
         const dataObj = new Date(item.created_at);
         const dh = `${dataObj.toLocaleDateString()} ${dataObj.toLocaleTimeString()}`;
 
@@ -472,6 +428,12 @@ window.verHistorico = async function(osAlvo) {
                 <td style="padding:0.75rem 1rem; font-family:monospace; font-size:0.75rem; color:#6b7280;">${esc(dh)}</td>
                 <td style="padding:0.75rem 1rem; font-weight:bold; color:#374151;">${esc(info.nome)}</td>
                 <td style="padding:0.75rem 1rem; text-align:center; font-size:0.75rem; ${esc(cor)}">${esc(txtStatus)} (${esc(String(item.status_cod))})${alertaLinha}</td>
+                <td style="padding:0.75rem 1rem; text-align:center; white-space:nowrap;">
+                    <button class="btn-editar-hist" data-id="${esc(String(item.id))}" title="Editar"
+                        style="background:none; border:none; cursor:pointer; padding:0.3rem; font-size:0.9rem;">✏️</button>
+                    <button class="btn-excluir-hist" data-id="${esc(String(item.id))}" title="Excluir"
+                        style="background:none; border:none; cursor:pointer; padding:0.3rem; font-size:0.9rem;">🗑️</button>
+                </td>
             </tr>
         `;
     });
@@ -480,6 +442,122 @@ window.verHistorico = async function(osAlvo) {
 
 window.fecharHistorico = function() {
     if(modalHist) modalHist.classList.remove('open');
+}
+
+// --- EDITAR/EXCLUIR APONTAMENTO (a partir do histórico da O.S.) ---
+
+window.abrirModalEditar = function(id) {
+    const item = historicoAtualPorId.get(String(id));
+    if (!item) return;
+
+    document.getElementById('editar_id').value = item.id;
+    document.getElementById('editar_status').value = String(item.status_cod);
+    document.getElementById('editar_data').value = isoParaDatetimeLocalBRT(item.created_at);
+    document.getElementById('editar_obs').value = item.obs || '';
+    document.getElementById('editar_admin_matricula').value = '';
+    document.getElementById('editar_admin_senha').value = '';
+    document.getElementById('editar_erro').innerText = '';
+
+    document.getElementById('modalEditarApontamento').classList.add('open');
+}
+
+window.fecharModalEditar = function() {
+    document.getElementById('modalEditarApontamento').classList.remove('open');
+}
+
+window.salvarEdicaoApontamento = async function() {
+    const erroEl = document.getElementById('editar_erro');
+    const id = document.getElementById('editar_id').value;
+    const status_cod = document.getElementById('editar_status').value;
+    const dataValor = document.getElementById('editar_data').value;
+    const obs = document.getElementById('editar_obs').value;
+    const matricula = document.getElementById('editar_admin_matricula').value.trim();
+    const senha = document.getElementById('editar_admin_senha').value.trim();
+
+    if (!matricula || !senha) {
+        erroEl.innerText = '⚠️ Preencha a matrícula e a senha do admin.';
+        return;
+    }
+    if (!dataValor) {
+        erroEl.innerText = '⚠️ Informe a data/hora.';
+        return;
+    }
+
+    try {
+        const url = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/editar-apontamento`;
+        const resp = await fetch(url, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'apikey': import.meta.env.VITE_SUPABASE_KEY,
+            },
+            body: JSON.stringify({
+                matricula, senha, id,
+                status_cod,
+                created_at: datetimeLocalBRTParaISO(dataValor),
+                obs,
+            }),
+        });
+        const result = await resp.json();
+
+        if (!resp.ok) {
+            erroEl.innerText = `⚠️ ${result.error || 'Erro ao salvar.'}`;
+            return;
+        }
+
+        window.fecharModalEditar();
+        if (osAtualModal) verHistorico(osAtualModal);
+        carregarDashboard();
+    } catch {
+        erroEl.innerText = '❌ Erro de conexão. Tente novamente.';
+    }
+}
+
+window.abrirModalExcluirDash = function(id) {
+    idParaExcluirDash = id;
+    document.getElementById('excluirDash_matricula').value = '';
+    document.getElementById('excluirDash_senha').value = '';
+    document.getElementById('excluirDash_erro').innerText = '';
+    document.getElementById('modalExcluirApontamentoDash').classList.add('open');
+}
+
+window.fecharModalExcluirDash = function() {
+    document.getElementById('modalExcluirApontamentoDash').classList.remove('open');
+}
+
+window.confirmarExclusaoDash = async function() {
+    const erroEl = document.getElementById('excluirDash_erro');
+    const matricula = document.getElementById('excluirDash_matricula').value.trim();
+    const senha = document.getElementById('excluirDash_senha').value.trim();
+
+    if (!matricula || !senha) {
+        erroEl.innerText = '⚠️ Preencha a matrícula e a senha do admin.';
+        return;
+    }
+
+    try {
+        const url = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/excluir-apontamento`;
+        const resp = await fetch(url, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'apikey': import.meta.env.VITE_SUPABASE_KEY,
+            },
+            body: JSON.stringify({ matricula, senha, id: idParaExcluirDash }),
+        });
+        const result = await resp.json();
+
+        if (!resp.ok) {
+            erroEl.innerText = `⚠️ ${result.error || 'Erro ao excluir.'}`;
+            return;
+        }
+
+        window.fecharModalExcluirDash();
+        if (osAtualModal) verHistorico(osAtualModal);
+        carregarDashboard();
+    } catch {
+        erroEl.innerText = '❌ Erro de conexão. Tente novamente.';
+    }
 }
 
 // --- EXCEL COM CUSTO ---

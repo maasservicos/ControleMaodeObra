@@ -1,4 +1,5 @@
 import { client } from './supabaseClient.js';
+import { detectarInconsistencias, isoParaDatetimeLocalBRT, datetimeLocalBRTParaISO } from './erros.js';
 
 function esc(str) {
     if (str == null) return '';
@@ -19,6 +20,9 @@ const listaApontamentos = document.getElementById('listaApontamentos');
 
 let statusPendente = null;
 let apontamentosAnteriores = [];
+// Trava contra duplo-clique/duplo-envio: sem isso, dois cliques rápidos em
+// "Iniciar" disparam dois `insert` de status 1 antes da tela travar.
+let travado = false;
 
 listaApontamentos.addEventListener('click', function(e) {
     const btn = e.target.closest('.btn-excluir-apontamento');
@@ -35,6 +39,8 @@ function mostrarAviso(titulo, detalhe) {
 
 // 🆕 FUNÇÃO DE LIMPEZA
 window.limparTela = function() {
+    travado = false;
+
     // 1. Limpa os campos visuais
     txtMatricula.value = "";
     txtOS.value = "";
@@ -46,6 +52,8 @@ window.limparTela = function() {
     // 3. Limpa avisos e foca na matrícula
     listaApontamentos.innerHTML = "";
     cardAviso.classList.add('hidden');
+    document.getElementById('cardErroApontamento').classList.add('hidden');
+    errosDetectados = [];
     limparSelecaoAvulso();
     txtMatricula.focus();
 }
@@ -107,7 +115,7 @@ txtMatricula.addEventListener('blur', async function() {
     lblNome.innerText = "🔍 Buscando...";
     
     // 1. Busca Funcionário
-    const { data: func } = await client.from('Funcionarios_Maas').select('*').eq('matricula', matriculaValor).maybeSingle();
+    const { data: func } = await client.from('Funcionarios_Maas').select('nome, funcao').eq('matricula', matriculaValor).maybeSingle();
     
     if (!func) {
         lblNome.innerText = "❌ Colaborador Não encontrado";
@@ -165,7 +173,172 @@ txtMatricula.addEventListener('blur', async function() {
         ativarModoLivre();
     }
     carregarLista();
+    verificarErrosMatricula(matriculaValor);
 });
+
+// --- DETECÇÃO DE ERRO NO PRÓPRIO OPERACIONAL ---
+// Mesma lógica usada no dashboard (auditoria), aplicada aqui pra deixar o
+// colaborador/admin corrigir na hora, sem precisar abrir o painel de gestão.
+let errosDetectados = [];
+
+async function verificarErrosMatricula(matricula) {
+    const cardErro = document.getElementById('cardErroApontamento');
+    const { data: historico } = await client
+        .from('SistemaOS_Maas')
+        .select('*')
+        .eq('matricula', matricula)
+        .eq('excluido_dashboard', false)
+        .order('created_at', { ascending: true });
+
+    const porOS = {};
+    (historico || []).forEach(item => {
+        if (!porOS[item.os]) porOS[item.os] = [];
+        porOS[item.os].push(item);
+    });
+
+    errosDetectados = Object.values(porOS).flatMap(detectarInconsistencias);
+
+    if (errosDetectados.length === 0) {
+        cardErro.classList.add('hidden');
+        return;
+    }
+
+    document.getElementById('listaErrosApontamento').innerHTML = errosDetectados
+        .map(e => `<li>O.S. ${esc(e.os)}: ${esc(e.motivo)}</li>`).join('');
+    cardErro.classList.remove('hidden');
+}
+
+window.abrirModalCorrecao = function() {
+    document.getElementById('modalCorrecao_matricula').value = '';
+    document.getElementById('modalCorrecao_senha').value = '';
+    document.getElementById('modalCorrecao_erro').innerText = '';
+    renderizarCorrecoes();
+    document.getElementById('modalCorrecao').classList.remove('hidden');
+}
+
+window.fecharModalCorrecao = function() {
+    document.getElementById('modalCorrecao').classList.add('hidden');
+}
+
+function renderizarCorrecoes() {
+    const container = document.getElementById('listaCorrecoes');
+
+    if (errosDetectados.length === 0) {
+        container.innerHTML = '<p style="font-size:0.8rem; color:#6b7280; text-align:center;">Nenhum erro pendente. 🎉</p>';
+        return;
+    }
+
+    container.innerHTML = errosDetectados.map((e, i) => `
+        <div style="background:#f9fafb; border:1px solid #e5e7eb; border-radius:0.5rem; padding:0.6rem 0.75rem;">
+            <div style="font-size:0.78rem; color:#374151; margin-bottom:0.5rem;"><b>O.S. ${esc(e.os)}</b> — ${esc(e.motivo)}</div>
+            ${e.item
+                ? `<button onclick="corrigirExcluirErro(${i})" class="btn btn-clean" style="height:auto; padding:0.4rem 0.75rem; font-size:0.78rem; color:#991b1b; border-color:#fecaca;">🗑️ Excluir este registro</button>`
+                : `<label style="display:block; font-size:0.7rem; font-weight:700; color:#6b7280; text-transform:uppercase; letter-spacing:0.05em; margin-bottom:0.3rem;">Data/hora real do término</label>
+                   <input type="datetime-local" id="dataTermino-${i}"
+                       value="${isoParaDatetimeLocalBRT(new Date().toISOString())}"
+                       min="${isoParaDatetimeLocalBRT(e.dataAbertura)}"
+                       max="${isoParaDatetimeLocalBRT(new Date().toISOString())}"
+                       style="width:100%; border:2px solid #e5e7eb; border-radius:0.5rem; padding:0.5rem 0.6rem; font-size:0.85rem; font-family:inherit; margin-bottom:0.5rem;">
+                   <button onclick="corrigirEncerrarErro(${i})" class="btn btn-clean" style="height:auto; padding:0.4rem 0.75rem; font-size:0.78rem; color:#003366; border-color:#bfdbfe;">✅ Confirmar término</button>`
+            }
+        </div>
+    `).join('');
+}
+
+
+async function validarAdminCorrecao() {
+    const matricula = document.getElementById('modalCorrecao_matricula').value.trim();
+    const senha = document.getElementById('modalCorrecao_senha').value.trim();
+    const erroEl = document.getElementById('modalCorrecao_erro');
+
+    if (!matricula || !senha) {
+        erroEl.innerText = '⚠️ Preencha a matrícula e a senha do admin.';
+        return null;
+    }
+    return { matricula, senha, erroEl };
+}
+
+window.corrigirExcluirErro = async function(indice) {
+    const cred = await validarAdminCorrecao();
+    if (!cred) return;
+    const erro = errosDetectados[indice];
+
+    try {
+        const url = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/excluir-apontamento`;
+        const resp = await fetch(url, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'apikey': import.meta.env.VITE_SUPABASE_KEY,
+            },
+            body: JSON.stringify({ matricula: cred.matricula, senha: cred.senha, id: erro.item.id }),
+        });
+        const result = await resp.json();
+
+        if (!resp.ok) {
+            cred.erroEl.innerText = `⚠️ ${result.error || 'Erro ao corrigir.'}`;
+            return;
+        }
+
+        await verificarErrosMatricula(erro.matricula);
+        renderizarCorrecoes();
+        carregarLista();
+    } catch {
+        cred.erroEl.innerText = '❌ Erro de conexão. Tente novamente.';
+    }
+}
+
+window.corrigirEncerrarErro = async function(indice) {
+    const cred = await validarAdminCorrecao();
+    if (!cred) return;
+    const erro = errosDetectados[indice];
+
+    const valorData = document.getElementById(`dataTermino-${indice}`).value;
+    if (!valorData) {
+        cred.erroEl.innerText = '⚠️ Informe a data/hora real do término.';
+        return;
+    }
+    const dataTerminoISO = datetimeLocalBRTParaISO(valorData);
+    if (new Date(dataTerminoISO) < new Date(erro.dataAbertura)) {
+        cred.erroEl.innerText = '⚠️ O término não pode ser antes do início da O.S.';
+        return;
+    }
+
+    const { ok, result } = await (async () => {
+        const url = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/validar-admin`;
+        const resp = await fetch(url, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'apikey': import.meta.env.VITE_SUPABASE_KEY,
+            },
+            body: JSON.stringify({ matricula: cred.matricula, senha: cred.senha }),
+        });
+        return { ok: resp.ok, result: await resp.json() };
+    })();
+
+    if (!ok) {
+        cred.erroEl.innerText = `⚠️ ${result.error || 'Acesso negado.'}`;
+        return;
+    }
+
+    const { error } = await client.from('SistemaOS_Maas').insert([{
+        matricula: erro.matricula,
+        os: erro.os,
+        status_cod: 5,
+        obs: `Correção manual (erro do sistema) por admin ${cred.matricula}`,
+        created_at: dataTerminoISO,
+    }]);
+
+    if (error) {
+        cred.erroEl.innerText = `⚠️ Erro ao encerrar: ${error.message}`;
+        return;
+    }
+
+    await verificarErrosMatricula(erro.matricula);
+    renderizarCorrecoes();
+    carregarLista();
+}
 
 // --- LISTAGEM DE HISTÓRICO ---
 async function carregarLista() {
@@ -235,11 +408,15 @@ async function carregarLista() {
 
 // --- BOTÕES DE AÇÃO ---
 window.definirAcao = async function(codigoStatus) {
+    if (travado) return;
+
     // Validação básica
     if (!txtMatricula.value || !txtOS.value) {
         alert("Preencha todos os campos antes de clicar!");
         return;
     }
+
+    travado = true;
 
     // Início de O.S: verifica se tem apontamento anterior em aberto na mesma OS
     // Serviço Avulso é individual (não representa um job compartilhado por equipe), então pula essa checagem.
@@ -307,19 +484,24 @@ window.trabalharJuntos = function() {
 window.cancelarContinuacao = function() {
     document.getElementById('modalContinuacao').classList.add('hidden');
     apontamentosAnteriores = [];
+    travado = false;
 }
 
 // Funções que o Modal chama quando clica em "Cancelar" ou "Confirmar"
 window.fecharModal = function() {
     document.getElementById('modalConfirmacao').classList.add('hidden');
     statusPendente = null;
+    travado = false;
 }
 
 window.confirmarEnvio = function() {
     console.log("Confirmado no modal! Ação pendente:", statusPendente);
     if (statusPendente) {
+        // Não usa fecharModal() aqui: ele zera `travado`, e o salvamento
+        // ainda está em andamento — quem libera a trava é executarSalvamento.
+        document.getElementById('modalConfirmacao').classList.add('hidden');
         executarSalvamento(statusPendente);
-        window.fecharModal();
+        statusPendente = null;
     }
 }
 
@@ -377,6 +559,7 @@ async function executarSalvamento(codigoStatus) {
     } else {
         console.error("❌ ERRO DO SUPABASE:", error);
         alert("Erro ao salvar: " + error.message);
+        travado = false;
     }
 }
 
@@ -564,29 +747,47 @@ window.abrirModalExclusao = function(id, os, hora, status) {
     document.getElementById('modalExclusao_matricula').focus();
 }
 
-document.getElementById('modalExclusao_matricula').addEventListener('blur', async function() {
-    const matricula = Number(this.value.trim()).toString();
+// Admin_Maas não tem mais leitura pública (a senha ficava exposta pra qualquer
+// client anônimo) — a pré-visualização do nome só é possível depois que a senha
+// também for digitada, validando via edge function (validar-admin).
+document.getElementById('modalExclusao_matricula').addEventListener('blur', function() {
+    document.getElementById('modalExclusao_nome').innerText = '';
+});
+
+document.getElementById('modalExclusao_senha').addEventListener('blur', async function() {
+    const matricula = Number(document.getElementById('modalExclusao_matricula').value.trim()).toString();
+    const senha = this.value.trim();
     const nomeEl = document.getElementById('modalExclusao_nome');
 
-    if (!matricula || matricula === '0') {
+    if (!matricula || matricula === '0' || !senha) {
         nomeEl.innerText = '';
         return;
     }
 
-    nomeEl.innerText = '🔍 Buscando...';
+    nomeEl.innerText = '🔍 Verificando...';
     nomeEl.style.color = '#6b7280';
 
-    const { data: admin } = await client
-        .from('Admin_Maas')
-        .select('nome')
-        .eq('matricula', matricula)
-        .maybeSingle();
+    try {
+        const url = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/validar-admin`;
+        const resp = await fetch(url, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'apikey': import.meta.env.VITE_SUPABASE_KEY,
+            },
+            body: JSON.stringify({ matricula, senha }),
+        });
+        const result = await resp.json();
 
-    if (admin) {
-        nomeEl.innerText = `👤 ${admin.nome}`;
-        nomeEl.style.color = '#003366';
-    } else {
-        nomeEl.innerText = '❌ Matrícula não autorizada';
+        if (resp.ok) {
+            nomeEl.innerText = `👤 ${result.nome}`;
+            nomeEl.style.color = '#003366';
+        } else {
+            nomeEl.innerText = '❌ Matrícula ou senha incorretos';
+            nomeEl.style.color = '#ef4444';
+        }
+    } catch {
+        nomeEl.innerText = '❌ Erro de conexão';
         nomeEl.style.color = '#ef4444';
     }
 });

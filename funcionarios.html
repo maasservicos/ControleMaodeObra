@@ -1,0 +1,133 @@
+<!DOCTYPE html>
+<html lang="pt-br">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <link rel="icon" href="Imagens/4.png" type="image/x-icon">
+    <title>Maas - Funcionários</title>
+
+    <link rel="stylesheet" href="css/dashboard.css">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;700&display=swap" rel="stylesheet">
+</head>
+<body>
+
+    <header class="header">
+        <div class="header-container">
+            <div class="header-left">
+                <div class="logo-box">
+                    <img src="Imagens/logo.png.jpg" alt="Maas">
+                </div>
+                <div class="brand-title">
+                    <h1>Maas</h1>
+                    <p>Funcionários</p>
+                </div>
+            </div>
+
+            <div class="header-right">
+                <a href="dashboard.html" class="nav-link">&larr; Painel de Gestão</a>
+                <a href="index.html" class="nav-link">Ir para Operacional &rarr;</a>
+            </div>
+        </div>
+    </header>
+
+    <main class="main-container">
+
+        <!-- Bloqueio até login de admin -->
+        <div id="loginBox" style="max-width: 26rem; margin: 3rem auto; background:var(--white); padding:1.5rem; border-radius:0.75rem; box-shadow: 0 1px 2px 0 rgba(0,0,0,0.05); display:flex; flex-direction:column;">
+            <h2 style="font-size: 1rem; font-weight: 700; margin-bottom: 1rem; text-align:center;">🔒 Acesso restrito</h2>
+            <div style="margin-bottom: 0.75rem; display:flex; flex-direction:column;">
+                <label class="input-label">Matrícula (admin)</label>
+                <input type="number" id="loginMatricula" class="input-field" style="width:100%;">
+            </div>
+            <div style="margin-bottom: 0.75rem; display:flex; flex-direction:column;">
+                <label class="input-label">Senha</label>
+                <input type="password" id="loginSenha" class="input-field" style="width:100%;">
+            </div>
+            <p id="loginErro" style="color:#ef4444; font-size:0.8rem; margin-bottom:0.75rem; min-height:1.1rem;"></p>
+            <button onclick="entrarAdmin()" class="btn btn-primary" style="width:100%;">Entrar</button>
+        </div>
+
+        <!-- Conteúdo liberado após login -->
+        <div id="conteudoFuncionarios" class="hidden">
+
+            <div class="filters-box">
+                <div class="filter-inputs">
+                    <div class="input-group">
+                        <label class="input-label">Buscar</label>
+                        <input type="text" id="buscaFuncionario" placeholder="Nome ou matrícula" class="input-field" style="width: auto;" oninput="renderizarFuncionarios()">
+                    </div>
+                </div>
+                <button onclick="abrirModalFuncionario()" class="btn btn-primary">
+                    + Novo Funcionário
+                </button>
+            </div>
+
+            <div class="table-container">
+                <div class="table-scroll">
+                    <table>
+                        <thead>
+                            <tr>
+                                <th class="px-6 py-4">Matrícula</th>
+                                <th class="px-6 py-4">Nome</th>
+                                <th class="px-6 py-4">Função</th>
+                                <th class="px-6 py-4 text-right">Valor/Hora</th>
+                                <th class="px-6 py-4 text-center">Ações</th>
+                            </tr>
+                        </thead>
+                        <tbody id="tabelaFuncionarios">
+                            <tr><td colspan="5" class="p-8 text-center text-gray-400">Carregando...</td></tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+
+        </div>
+
+    </main>
+
+    <!-- Modal criar/editar -->
+    <div id="modalFuncionario" class="modal-overlay">
+        <div class="modal-card" style="max-width: 28rem;">
+            <div class="modal-header">
+                <h3 id="modalFuncionarioTitulo" style="font-weight: bold; font-size: 1.125rem;">Novo Funcionário</h3>
+                <button onclick="fecharModalFuncionario()" class="btn-close-modal">✕</button>
+            </div>
+
+            <div style="padding: 1.25rem;">
+                <input type="hidden" id="funcId">
+
+                <div class="input-group" style="margin-bottom: 0.75rem; display:block;">
+                    <label class="input-label">Matrícula</label>
+                    <input type="number" id="funcMatricula" class="input-field" style="width:100%;">
+                </div>
+                <div class="input-group" style="margin-bottom: 0.75rem; display:block;">
+                    <label class="input-label">Nome</label>
+                    <input type="text" id="funcNome" class="input-field" style="width:100%;">
+                </div>
+                <div class="input-group" style="margin-bottom: 0.75rem; display:block;">
+                    <label class="input-label">Função</label>
+                    <input type="text" id="funcFuncao" class="input-field" style="width:100%;">
+                </div>
+                <div class="input-group" style="margin-bottom: 0.75rem; display:block;">
+                    <label class="input-label">Valor/Hora (R$)</label>
+                    <input type="number" step="0.01" id="funcValorHora" class="input-field" style="width:100%;">
+                </div>
+
+                <p id="funcErro" style="color:#ef4444; font-size:0.8rem; min-height:1.1rem;"></p>
+            </div>
+
+            <div style="padding: 1rem; background-color: var(--gray-50); border-top: 1px solid var(--gray-200); text-align: right; display:flex; gap:0.5rem; justify-content:flex-end;">
+                <button onclick="fecharModalFuncionario()" class="btn btn-clean">Cancelar</button>
+                <button onclick="salvarFuncionario()" class="btn btn-primary">Salvar</button>
+            </div>
+        </div>
+    </div>
+
+    <script type="module" src="js/funcionarios.js"></script>
+    <footer>
+        <span style="font-weight: 600; color: #6b7280;">Versão 1.00-Homolog</span>
+        <span style="margin: 0 0.5rem;">|</span>
+        <span style="font-weight: 600; color: #6b7280;">BI MAAS</span>
+    </footer>
+</body>
+</html>
