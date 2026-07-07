@@ -7,6 +7,7 @@ export default defineConfig({
         main:     'index.html',
         dashboard: 'dashboard.html',
         consulta:  'consulta-os.html',
+        funcionarios: 'funcionarios.html',
       }
     }
   }
