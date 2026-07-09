@@ -307,13 +307,13 @@ function renderizarTabelaPrincipal() {
             let badgeClass = "badge badge-gray";
             let textoStatus = st;
             
-            if(st === 1) { badgeClass = "badge badge-blue"; textoStatus = "Início"; }
-            if(st === 2) { badgeClass = "badge badge-yellow"; textoStatus = "Peças"; }
-            if(st === 3) { badgeClass = "badge badge-orange"; textoStatus = "Intervalo"; }
-            if(st === 4) { badgeClass = "badge badge-blue"; textoStatus = "Retorno"; }
-            if(st === 5) { badgeClass = "badge badge-green"; textoStatus = "Finalizado"; }
-            if(st === 6) { badgeClass = "badge badge-yellow"; textoStatus = "Pausa"; }
-            if(st === 7) { badgeClass = "badge badge-red"; textoStatus = "Fim Exp."; }
+            if(st === 1) { badgeClass = "badge badge-blue"; textoStatus = "Início da O.S."; }
+            if(st === 2) { badgeClass = "badge badge-yellow"; textoStatus = "Pausa (Peças)"; }
+            if(st === 3) { badgeClass = "badge badge-orange"; textoStatus = "Pausa (Intervalo)"; }
+            if(st === 4) { badgeClass = "badge badge-blue"; textoStatus = "Retorno para O.S."; }
+            if(st === 5) { badgeClass = "badge badge-green"; textoStatus = "Término da O.S."; }
+            if(st === 6) { badgeClass = "badge badge-yellow"; textoStatus = "Pausa (Pausa)"; }
+            if(st === 7) { badgeClass = "badge badge-red"; textoStatus = "Fim do Expediente"; }
 
             htmlLinhas += `
                 <tr class="tr-hover group">
@@ -410,13 +410,13 @@ window.verHistorico = async function(osAlvo) {
 
         let txtStatus = item.status_cod;
         let cor = "color:#4b5563;";
-        if(item.status_cod == 1) { txtStatus="Início"; cor="color:#1C1C1C; font-weight:bold;"; }
-        if(item.status_cod == 2) { txtStatus="Peças"; cor="color:#2563eb; font-weight:bold;"; }
-        if(item.status_cod == 3) { txtStatus="Intervalo"; cor="color:#2563eb; font-weight:bold;"; }
-        if(item.status_cod == 4) { txtStatus="Retorno"; cor="color:#2563eb; font-weight:bold;"; }
-        if(item.status_cod == 5) { txtStatus="Finalizado"; cor="color:#008000; font-weight:bold;"; }
-        if(item.status_cod == 6) { txtStatus="Pausa"; cor="color:#2563eb; font-weight:bold;"; }
-        if(item.status_cod == 7) { txtStatus="Fim Expediente"; cor="color:#FF0000; font-weight:bold;"; }
+        if(item.status_cod == 1) { txtStatus="Início da O.S."; cor="color:#1C1C1C; font-weight:bold;"; }
+        if(item.status_cod == 2) { txtStatus="Pausa (Peças)"; cor="color:#2563eb; font-weight:bold;"; }
+        if(item.status_cod == 3) { txtStatus="Pausa (Intervalo)"; cor="color:#2563eb; font-weight:bold;"; }
+        if(item.status_cod == 4) { txtStatus="Retorno para O.S."; cor="color:#2563eb; font-weight:bold;"; }
+        if(item.status_cod == 5) { txtStatus="Término da O.S."; cor="color:#008000; font-weight:bold;"; }
+        if(item.status_cod == 6) { txtStatus="Pausa (Pausa)"; cor="color:#2563eb; font-weight:bold;"; }
+        if(item.status_cod == 7) { txtStatus="Fim do Expediente"; cor="color:#FF0000; font-weight:bold;"; }
 
         const motivoErro = motivoPorItem.get(item);
         const alertaLinha = motivoErro

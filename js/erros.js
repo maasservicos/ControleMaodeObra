@@ -45,11 +45,20 @@ export function detectarInconsistencias(historicoOrdenado) {
                 erros.push({ item: registro, os: osRef, matricula: matriculaRef, motivo: 'Apontamento registrado após o Término da O.S.' });
             }
 
+            // "Encerrado por continuidade" é inserido automaticamente pelo sistema quando outro
+            // colaborador assume a mesma O.S./rótulo de avulso (ver confirmarContinuacao em
+            // operacional.js) — não é uma ação do colaborador, então não deve virar "erro" nem
+            // "ficou X horas aberto": o horário do registro é o do OUTRO colaborador que assumiu,
+            // não reflete quanto tempo este colaborador realmente trabalhou.
+            const encerramentoPorContinuidade = st === 5 && registro.obs === 'Encerrado por continuidade';
+
             if (!entrada) {
-                erros.push({ item: registro, os: osRef, matricula: matriculaRef, motivo: `${nomesFechamento[st]} apontado sem Início/Retorno anterior` });
+                if (!encerramentoPorContinuidade) {
+                    erros.push({ item: registro, os: osRef, matricula: matriculaRef, motivo: `${nomesFechamento[st]} apontado sem Início/Retorno anterior` });
+                }
             } else {
                 const horasAberto = (dataReg - entrada) / (1000 * 60 * 60);
-                if (horasAberto > LIMITE_HORAS_ABERTO) {
+                if (horasAberto > LIMITE_HORAS_ABERTO && !encerramentoPorContinuidade) {
                     erros.push({ item: registro, os: osRef, matricula: matriculaRef, motivo: `Ficou ${horasAberto.toFixed(1)}h em andamento sem pausa (limite ${LIMITE_HORAS_ABERTO}h)` });
                 }
             }

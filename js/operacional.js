@@ -24,6 +24,29 @@ let apontamentosAnteriores = [];
 // "Iniciar" disparam dois `insert` de status 1 antes da tela travar.
 let travado = false;
 
+// Último registro do colaborador (preenchido no blur da matrícula). Usado só
+// para saber se o clique em "Iniciar" é retomada da mesma O.S. pausada/em
+// peças (deve gravar Retorno, status 4) ou o começo de uma O.S. diferente
+// (gravar Início, status 1) — ver resolverCodigoInicio().
+let ultimoRegistroMatricula = null;
+// Código real a gravar quando o fluxo de "Iniciar" for confirmado (via modal
+// de continuação ou direto); calculado em definirAcao() e consumido pelas
+// funções do modal, que não recebem o código como parâmetro.
+let codigoInicioResolvido = 1;
+
+// Retorna 4 (Retorno) se o colaborador está retomando a mesma O.S. que deixou
+// em Peças/Pausa, ou 1 (Início) se é uma O.S. nova/diferente.
+function resolverCodigoInicio(osDigitado) {
+    if (
+        ultimoRegistroMatricula &&
+        (Number(ultimoRegistroMatricula.status_cod) === 2 || Number(ultimoRegistroMatricula.status_cod) === 6) &&
+        ultimoRegistroMatricula.os === osDigitado
+    ) {
+        return 4;
+    }
+    return 1;
+}
+
 listaApontamentos.addEventListener('click', function(e) {
     const btn = e.target.closest('.btn-excluir-apontamento');
     if (!btn) return;
@@ -40,6 +63,8 @@ function mostrarAviso(titulo, detalhe) {
 // 🆕 FUNÇÃO DE LIMPEZA
 window.limparTela = function() {
     travado = false;
+    ultimoRegistroMatricula = null;
+    codigoInicioResolvido = 1;
 
     // 1. Limpa os campos visuais
     txtMatricula.value = "";
@@ -81,7 +106,9 @@ function ativarModoPausado(dados) {
     txtOS.readOnly = true ;
     painelDados.disabled = true;
     txtOS.value = dados.os;
-    mostrarAviso("O.S Pausada", `Aguardando retorno.`);
+    const motivos = { 2: 'Aguardando Peças', 3: 'Intervalo', 6: 'Pausa' };
+    const motivo = motivos[Number(dados.status_cod)] || 'Pausada';
+    mostrarAviso(`O.S ${motivo}`, `Aguardando retorno para continuar o serviço.`);
 }
 
 // MODO 3: LIVRE
@@ -127,6 +154,7 @@ txtMatricula.addEventListener('blur', async function() {
     lblNome.className = "text-center text-maas-blue font-bold text-sm mt-2";
 
     // 2. Busca Último Status
+    ultimoRegistroMatricula = null;
     const { data: historico } = await client.from('SistemaOS_Maas').select('*').eq('matricula', matriculaValor).order('created_at', { ascending: false }).limit(1);
 
     if (historico && historico.length > 0) {
@@ -144,24 +172,31 @@ txtMatricula.addEventListener('blur', async function() {
                 document.getElementById('msgAvisoDetalhe').innerText = `⚠️ Tem outra O.S. em aberto: ${lista}`;
             }
         } else if (st === 3) {
+            // Intervalo: só pode continuar via "Retomar" (grava Retorno, status
+            // 4) — sem opção de terminar direto nem de iniciar outra O.S.
             ativarModoPausado(last);
+        } else if (st === 2 || st === 6) {
+            // Peças ou Pausa: mantém a flexibilidade de iniciar uma O.S.
+            // diferente. Se o colaborador digitar a MESMA O.S., o clique em
+            // "Iniciar" grava Retorno (4) em vez de Início (1) de novo —
+            // ver resolverCodigoInicio().
+            ultimoRegistroMatricula = last;
+            ativarModoLivre();
+            txtOS.value = last.os;
+            const textoStatus = st === 2 ? 'Pausa (Peças)' : 'Pausa (Pausa)';
+            const osAbertas = await buscarOSsEmAberto(matriculaValor, last.os);
+            let detalhe = `Último: ${textoStatus} na O.S. ${last.os}. Retome a mesma O.S. ou digite outra para iniciar.`;
+            if (osAbertas.length > 0) {
+                const lista = osAbertas.map(o => {
+                    const s = Number(o.status_cod) === 2 ? 'Peças' : 'Pausa';
+                    return `O.S. ${o.os} (${s})`;
+                }).join(' | ');
+                detalhe += ` ⚠️ Também em aberto: ${lista}`;
+            }
+            mostrarAviso("PODE RETOMAR OU INICIAR OUTRA O.S.", detalhe);
         } else {
             ativarModoLivre();
-            if (st === 2 || st === 6) {
-                // Peças ou Pausa: pode retomar a mesma O.S. ou iniciar outra
-                txtOS.value = last.os;
-                const textoStatus = st === 2 ? "PEÇAS" : "PAUSA";
-                const osAbertas = await buscarOSsEmAberto(matriculaValor, last.os);
-                let detalhe = `Último: ${textoStatus} na O.S. ${last.os}. Retome ou digite nova O.S.`;
-                if (osAbertas.length > 0) {
-                    const lista = osAbertas.map(o => {
-                        const s = Number(o.status_cod) === 2 ? 'Peças' : 'Pausa';
-                        return `O.S. ${o.os} (${s})`;
-                    }).join(' | ');
-                    detalhe += ` ⚠️ Também em aberto: ${lista}`;
-                }
-                mostrarAviso("PODE INICIAR OUTRA O.S.", detalhe);
-            } else if (st === 7) {
+            if (st === 7) {
                 txtOS.value = last.os;
                 mostrarAviso("PRONTO PARA RETOMAR", `Último registro: FIM DE EXPEDIENTE. Clique em INICIAR.`);
             } else {
@@ -425,6 +460,9 @@ window.definirAcao = async function(codigoStatus) {
     // nunca ter clicado no chip nesta sessão.
     if (codigoStatus === 1) {
         const os = txtOS.value.trim().padStart(6, '0');
+        // Se for a mesma O.S. que o colaborador deixou em Peças/Pausa, isto
+        // resolve para 4 (Retorno) em vez de 1 (Início) — ver resolverCodigoInicio().
+        codigoInicioResolvido = resolverCodigoInicio(os);
         if (/^\d+$/.test(os)) {
             const matricula = Number(txtMatricula.value.trim()).toString();
             const anteriores = await buscarApontamentosAbertosNaOS(os, matricula);
@@ -438,7 +476,7 @@ window.definirAcao = async function(codigoStatus) {
                 return;
             }
         }
-        executarSalvamento(1);
+        executarSalvamento(codigoInicioResolvido);
         return;
     }
 
@@ -472,13 +510,13 @@ window.confirmarContinuacao = async function() {
         }]);
     }
     apontamentosAnteriores = [];
-    executarSalvamento(1);
+    executarSalvamento(codigoInicioResolvido);
 }
 
 window.trabalharJuntos = function() {
     document.getElementById('modalContinuacao').classList.add('hidden');
     apontamentosAnteriores = [];
-    executarSalvamento(1);
+    executarSalvamento(codigoInicioResolvido);
 }
 
 window.cancelarContinuacao = function() {
