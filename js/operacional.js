@@ -197,8 +197,8 @@ txtMatricula.addEventListener('blur', async function() {
     
     if (!func) {
         matriculaValida = false;
-        lblName.innerText = "❌ Colaborador Não encontrado. Digite a matrícula correta.";
-        lblName.className = "text-center text-red-500 font-bold text-sm mt-2";
+        lblNome.innerText = "❌ Colaborador Não encontrado. Digite a matrícula correta.";
+        lblNome.className = "text-center text-red-500 font-bold text-sm mt-2";
         bloquearPorMatriculaInvalida();
         return;
     }
