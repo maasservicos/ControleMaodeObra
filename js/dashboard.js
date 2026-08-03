@@ -1,5 +1,5 @@
 import { client } from './supabaseClient.js';
-import { detectarInconsistencias, isoParaDatetimeLocalBRT, datetimeLocalBRTParaISO } from './erros.js';
+import { detectarInconsistencias, isoParaDatetimeLocalBRT, datetimeLocalBRTParaISO, ehOSNumerica } from './erros.js';
 
 function esc(str) {
     if (str == null) return '';
@@ -29,6 +29,7 @@ const modalHist = document.getElementById('modalHistorico');
 const lblOSModal = document.getElementById('lblOSModal');
 const tabelaHist = document.getElementById('tabelaHistorico');
 const alertaErrosModal = document.getElementById('alertaErrosModal');
+const resumoAvulsoModal = document.getElementById('resumoAvulsoModal');
 const kpiErros = document.getElementById('kpiErros');
 
 // Variáveis Globais
@@ -190,26 +191,23 @@ function processarErros() {
 }
 
 
-function calcularMetricasMO(matricula, os) {
-
-    const chaveIndex = `${os}-${matricula}`;
-    let historico = mapaHistoricoOS[chaveIndex] || [];
-
-    historico.sort((a, b) => new Date(a.created_at) - new Date(b.created_at));
-
+// Percorre um histórico já ordenado cronologicamente e soma os períodos trabalhados
+// (Início/Retorno até a próxima pausa/término). Usada tanto para O.S. reais quanto
+// para Serviço Avulso — o tempo é sempre calculado, só o custo (abaixo) não se aplica ao avulso.
+function horasDecimaisDeHistorico(historicoOrdenado) {
     let tempoTrabalhadoMs = 0;
     let entrada = null;
 
-    historico.forEach(registro => {
+    historicoOrdenado.forEach(registro => {
         const st = Number(registro.status_cod);
         const dataReg = new Date(registro.created_at);
 
-        if (st === 1 || st === 4) { 
+        if (st === 1 || st === 4) {
             entrada = dataReg;
         }
         else if ((st === 2 || st === 3 || st === 5 || st === 6 || st === 7) && entrada) {
             tempoTrabalhadoMs += (dataReg - entrada);
-            entrada = null; 
+            entrada = null;
         }
     });
 
@@ -217,12 +215,25 @@ function calcularMetricasMO(matricula, os) {
         tempoTrabalhadoMs += (new Date() - entrada);
     }
 
-    const horasDecimais = tempoTrabalhadoMs / (1000 * 60 * 60);
+    return tempoTrabalhadoMs / (1000 * 60 * 60);
+}
+
+function calcularMetricasMO(matricula, os) {
+
+    const chaveIndex = `${os}-${matricula}`;
+    let historico = mapaHistoricoOS[chaveIndex] || [];
+
+    historico.sort((a, b) => new Date(a.created_at) - new Date(b.created_at));
+
+    const horasDecimais = horasDecimaisDeHistorico(historico);
     const valorHora = mapaFuncionarios[matricula]?.valor || 0;
+
+    // Serviço Avulso não representa uma O.S. real com orçamento — só contabiliza tempo, nunca custo.
+    const custoTotal = ehOSNumerica(os) ? horasDecimais * valorHora : 0;
 
     return {
         horasDecimais: horasDecimais,
-        custoTotal: horasDecimais * valorHora
+        custoTotal: custoTotal
     };
 }
 
@@ -297,7 +308,10 @@ function renderizarTabelaPrincipal() {
                 : '';
 
             const metricas = calcularMetricasMO(item.matricula, item.os);
-            const custoFormatado = metricas.custoTotal.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
+            // Serviço Avulso não tem custo — deixa a célula em branco em vez de "R$ 0,00" (que pareceria erro).
+            const custoFormatado = ehOSNumerica(item.os)
+                ? metricas.custoTotal.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })
+                : '';
 
             const horasInt = Math.floor(metricas.horasDecimais);
             const minutosInt = Math.floor((metricas.horasDecimais - horasInt) * 60);
@@ -355,6 +369,7 @@ window.verHistorico = async function(osAlvo) {
     if(lblOSModal) lblOSModal.innerText = osAlvo;
     if(tabelaHist) tabelaHist.innerHTML = '<tr><td colspan="4" style="padding:1rem; text-align:center; color:#9ca3af;">Carregando...</td></tr>';
     if(alertaErrosModal) { alertaErrosModal.innerHTML = ''; alertaErrosModal.classList.add('hidden'); }
+    if(resumoAvulsoModal) { resumoAvulsoModal.innerHTML = ''; resumoAvulsoModal.classList.add('hidden'); }
     if(modalHist) modalHist.classList.add('open');
 
     const { data: historicoOS, error } = await client
@@ -378,6 +393,7 @@ window.verHistorico = async function(osAlvo) {
 
     const motivoPorItem = new Map();
     const motivosGerais = [];
+    const horasPorMatricula = new Map();
 
     Object.keys(porMatricula).forEach(matricula => {
         const historicoOrdenado = [...porMatricula[matricula]].sort((a, b) => new Date(a.created_at) - new Date(b.created_at));
@@ -387,6 +403,7 @@ window.verHistorico = async function(osAlvo) {
             motivosGerais.push(`${nomeColab}: ${erro.motivo}`);
             if (erro.item) motivoPorItem.set(erro.item, erro.motivo);
         });
+        horasPorMatricula.set(matricula, horasDecimaisDeHistorico(historicoOrdenado));
     });
 
     if (alertaErrosModal) {
@@ -396,6 +413,29 @@ window.verHistorico = async function(osAlvo) {
         } else {
             alertaErrosModal.innerHTML = '';
             alertaErrosModal.classList.add('hidden');
+        }
+    }
+
+    // Serviço Avulso não tem O.S. dedicada por pessoa — quando mais de um colaborador aponta
+    // o mesmo serviço/dia, mostra o tempo total do time (soma), já que não há custo a somar aqui.
+    if (resumoAvulsoModal) {
+        const matriculasEnvolvidas = Object.keys(porMatricula);
+        if (!ehOSNumerica(osAlvo) && matriculasEnvolvidas.length > 1) {
+            const formatarHM = h => {
+                const hInt = Math.floor(h);
+                const mInt = Math.round((h - hInt) * 60);
+                return `${String(hInt).padStart(2, '0')}:${String(mInt).padStart(2, '0')}`;
+            };
+            const totalHoras = matriculasEnvolvidas.reduce((soma, m) => soma + (horasPorMatricula.get(m) || 0), 0);
+            const detalhe = matriculasEnvolvidas
+                .map(m => `${esc(mapaFuncionarios[m]?.nome || m)}: ${formatarHM(horasPorMatricula.get(m) || 0)}`)
+                .join(' &nbsp;|&nbsp; ');
+
+            resumoAvulsoModal.innerHTML = `⏱️ <strong>Tempo total do time neste serviço: ${formatarHM(totalHoras)}</strong><br><span style="opacity:0.85;">${detalhe}</span>`;
+            resumoAvulsoModal.classList.remove('hidden');
+        } else {
+            resumoAvulsoModal.innerHTML = '';
+            resumoAvulsoModal.classList.add('hidden');
         }
     }
 
@@ -610,7 +650,8 @@ window.exportarExcelDashboard = async function() {
                 
                 // Nossas colunas novas:
                 "Tempo Trabalhado": tempoExcel,        // Coluna H
-                "Custo M.O. (R$)": metricas.custoTotal // Coluna I (vai como número puro para permitir soma no Excel)
+                // Serviço Avulso não tem custo — deixa em branco em vez de 0 (metricas.custoTotal já vem 0 do calcularMetricasMO)
+                "Custo M.O. (R$)": ehOSNumerica(item.os) ? metricas.custoTotal : '' // Coluna I (número puro para permitir soma no Excel)
             };
         });
         

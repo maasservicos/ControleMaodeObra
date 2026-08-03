@@ -211,6 +211,11 @@ td { padding: 1rem 1.5rem; border-bottom: 1px solid var(--gray-100); }
 }
 .alerta-erro-banner ul { margin: 0.5rem 0 0 1.25rem; }
 
+.resumo-avulso-banner {
+    background-color: var(--blue-50); color: var(--blue-800);
+    padding: 0.75rem 1rem; font-size: 0.8rem; border-bottom: 1px solid var(--blue-100);
+}
+
 .modal-overlay { 
     position: fixed; inset: 0; background-color: rgba(0,0,0,0.8); z-index: 50; display: none; justify-content: center; align-items: center; padding: 1rem; backdrop-filter: blur(4px);
 }

@@ -45,7 +45,12 @@
             <div id="painelDados">
                 <div style="margin-bottom: 1rem;">
                     <label class="input-label">Matrícula</label>
-                    <input type="number" id="txtMatricula" class="input-field" placeholder="Digite...">
+                    <input type="text"
+                        id="txtMatricula"
+                        inputmode="numeric"
+                        oninput="this.value = this.value.replace(/[^0-9]/g, '')"
+                        class="input-field"
+                        placeholder="Digite...">
                     <div id="lblNomeFuncionario" class="msg-feedback" style=" display: flex; justify-content: center;"></div>
                 </div>
 
@@ -71,8 +76,8 @@
             <div style="display:flex; flex-direction:column; gap:0.75rem;">
                 
                 <div id="divInicio" class="block">
-                    <button onclick="definirAcao(1)" class="btn btn-xl btn-green">
-                        <span style="font-size:1.5rem">🚀</span> Iniciar Ordem de Serviço
+                    <button id="btnIniciarAcao" onclick="definirAcao(1)" class="btn btn-xl btn-green">
+                        <span style="font-size:1.5rem">🚀</span> <span id="txtBtnIniciar">Iniciar Ordem de Serviço</span>
                     </button>
                     <div style="height: 0.5rem;"></div>
                     <button onclick="limparTela()" class="btn btn-lg btn-clean">
@@ -89,7 +94,7 @@
                         <button onclick="definirAcao(7)" class="btn btn-square bg-red"><span style="font-size:1.5rem">🛑</span>Fim do Expediente</button>
                     </div>
                     <button onclick="definirAcao(5)" class="btn btn-xl btn-blue">
-                        <span style="font-size:1.5rem">✅</span> Término da Ordem de Serviço
+                        <span style="font-size:1.5rem">✅</span> <span id="txtBtnTermino">Término da Ordem de Serviço</span>
                     </button>
                     <div style="height: 0.5rem;"></div>
                     <button onclick="limparTela()" class="btn btn-lg btn-clean">

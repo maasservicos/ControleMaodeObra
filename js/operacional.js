@@ -1,5 +1,5 @@
 import { client } from './supabaseClient.js';
-import { detectarInconsistencias, isoParaDatetimeLocalBRT, datetimeLocalBRTParaISO } from './erros.js';
+import { detectarInconsistencias, isoParaDatetimeLocalBRT, datetimeLocalBRTParaISO, ehOSNumerica } from './erros.js';
 
 function esc(str) {
     if (str == null) return '';
@@ -17,6 +17,7 @@ const txtOS = document.getElementById('txtOS');
 const painelDados = document.getElementById('painelDados');
 const cardAviso = document.getElementById('cardAviso');
 const listaApontamentos = document.getElementById('listaApontamentos');
+const btnIniciarAcao = document.getElementById('btnIniciarAcao');
 
 let statusPendente = null;
 let apontamentosAnteriores = [];
@@ -33,6 +34,34 @@ let ultimoRegistroMatricula = null;
 // de continuação ou direto); calculado em definirAcao() e consumido pelas
 // funções do modal, que não recebem o código como parâmetro.
 let codigoInicioResolvido = 1;
+
+// Só vira true quando o blur da matrícula encontra o colaborador em
+// Funcionarios_Maas. Sem essa trava, dava pra apontar com matrícula
+// inexistente/digitada errada (ex: "-0.604909"): o aviso "Colaborador Não
+// encontrado" aparecia, mas nada impedia o clique em Iniciar/Pausa/Término.
+let matriculaValida = false;
+
+txtMatricula.addEventListener('input', function() {
+    this.value = this.value.replace(/[^0-9]/g, '');
+    matriculaValida = false;
+});
+
+// Enquanto a matrícula não é validada, ninguém mexe no resto da tela — nem
+// digita O.S., nem escolhe avulso, nem clica em Iniciar. O foco volta sozinho
+// pro campo de matrícula até o colaborador corrigir o número.
+function bloquearPorMatriculaInvalida() {
+    txtOS.disabled = true;
+    document.querySelectorAll('[id^="avulso-"]').forEach(btn => btn.disabled = true);
+    if (btnIniciarAcao) btnIniciarAcao.disabled = true;
+    txtMatricula.focus();
+    txtMatricula.select();
+}
+
+function desbloquearCamposLivres() {
+    txtOS.disabled = false;
+    document.querySelectorAll('[id^="avulso-"]').forEach(btn => btn.disabled = false);
+    if (btnIniciarAcao) btnIniciarAcao.disabled = false;
+}
 
 // Retorna 4 (Retorno) se o colaborador está retomando a mesma O.S. que deixou
 // em Peças/Pausa, ou 1 (Início) se é uma O.S. nova/diferente.
@@ -65,6 +94,7 @@ window.limparTela = function() {
     travado = false;
     ultimoRegistroMatricula = null;
     codigoInicioResolvido = 1;
+    matriculaValida = false;
 
     // 1. Limpa os campos visuais
     txtMatricula.value = "";
@@ -83,16 +113,34 @@ window.limparTela = function() {
     txtMatricula.focus();
 }
 
+// Troca o texto dos botões de Início/Término entre "O.S." e "Serviço Avulso" (as
+// paradas/retornos continuam com o mesmo texto nos dois casos, por pedido do usuário).
+function atualizarTextoBotaoIniciar() {
+    const txt = document.getElementById('txtBtnIniciar');
+    if (!txt) return;
+    const valor = txtOS.value.trim();
+    const avulso = valor !== '' && !ehOSNumerica(valor);
+    txt.innerText = avulso ? 'Iniciar Serviço Avulso' : 'Iniciar Ordem de Serviço';
+}
+
+function atualizarTextoBotaoTermino(os) {
+    const txt = document.getElementById('txtBtnTermino');
+    if (!txt) return;
+    const avulso = os && !ehOSNumerica(os);
+    txt.innerText = avulso ? 'Terminar Serviço Avulso' : 'Término da Ordem de Serviço';
+}
+
 // MODO 1: TRABALHANDO
 function ativarModoTrabalhando(dados) {
     document.getElementById('divInicio').classList.add('hidden');
     document.getElementById('divTrabalhando').classList.remove('hidden');
     document.getElementById('divPausado').classList.add('hidden');
-    
+
     txtMatricula.readOnly = true;
     txtOS.readOnly = true ;
     painelDados.disabled = true;
     txtOS.value = dados.os;
+    atualizarTextoBotaoTermino(dados.os);
     mostrarAviso("O.S em Andamento", `O.S. ${dados.os} iniciada.`);
 }
 
@@ -118,11 +166,14 @@ function ativarModoLivre() {
     document.getElementById('divPausado').classList.add('hidden');
 
     txtMatricula.readOnly = false;
-    txtOS.disabled = false;
     txtOS.readOnly = false;
     txtOS.maxLength = 6;
     painelDados.disabled = false;
     cardAviso.classList.add('hidden');
+    // Modo Livre = tela pronta pra uma nova matrícula; sempre destrava O.S./avulso/Iniciar
+    // aqui (inclusive no "Limpar Tela"). O bloqueio por matrícula inválida é reaplicado
+    // logo em seguida pelo próprio blur, se for o caso.
+    desbloquearCamposLivres();
 }
 
 // --- CÉREBRO: DIGITOU MATRÍCULA ---
@@ -145,11 +196,15 @@ txtMatricula.addEventListener('blur', async function() {
     const { data: func } = await client.from('Funcionarios_Maas').select('nome, funcao').eq('matricula', matriculaValor).maybeSingle();
     
     if (!func) {
-        lblNome.innerText = "❌ Colaborador Não encontrado";
-        lblNome.className = "text-center text-red-500 font-bold text-sm mt-2";
-        return; 
+        matriculaValida = false;
+        lblName.innerText = "❌ Colaborador Não encontrado. Digite a matrícula correta.";
+        lblName.className = "text-center text-red-500 font-bold text-sm mt-2";
+        bloquearPorMatriculaInvalida();
+        return;
     }
 
+    matriculaValida = true;
+    desbloquearCamposLivres();
     lblNome.innerText = `👤 ${func.nome} - ${func.funcao}`;
     lblNome.className = "text-center text-maas-blue font-bold text-sm mt-2";
 
@@ -207,6 +262,7 @@ txtMatricula.addEventListener('blur', async function() {
         txtOS.value = "";
         ativarModoLivre();
     }
+    atualizarTextoBotaoIniciar();
     carregarLista();
     verificarErrosMatricula(matriculaValor);
 });
@@ -451,6 +507,14 @@ window.definirAcao = async function(codigoStatus) {
         return;
     }
 
+    // Bloqueia apontamento com matrícula que não existe em Funcionarios_Maas —
+    // sem isso, um número digitado errado (ex: transposição, sobra de dígito)
+    // criava um registro "fantasma" que nenhum colaborador real consegue fechar depois.
+    if (!matriculaValida) {
+        alert("Matrícula não encontrada. Verifique o número digitado antes de continuar.");
+        return;
+    }
+
     travado = true;
 
     // Início de O.S: verifica se tem apontamento anterior em aberto na mesma OS
@@ -486,7 +550,9 @@ window.definirAcao = async function(codigoStatus) {
         const modal = document.getElementById('modalConfirmacao');
         const texto = document.getElementById('textoConfirmacao');
         if (modal) {
-            if (codigoStatus === 5) texto.innerText = "Confirma o Término da Ordem de Serviço?";
+            if (codigoStatus === 5) texto.innerText = ehOSNumerica(txtOS.value.trim())
+                ? "Confirma o Término da Ordem de Serviço?"
+                : "Confirma o Término do Serviço Avulso?";
             if (codigoStatus === 7) texto.innerText = "Confirma o Fim do Expediente?";
             modal.classList.remove('hidden');
         }
@@ -726,6 +792,7 @@ window.selecionarAvulso = function(id, nome) {
     if (avulsoAtivoId === id) {
         limparSelecaoAvulso();
         txtOS.value = "";
+        atualizarTextoBotaoIniciar();
         return;
     }
 
@@ -736,6 +803,7 @@ window.selecionarAvulso = function(id, nome) {
     const dataHoje = new Date().toLocaleDateString('pt-BR');
     txtOS.value = `${nome} - ${dataHoje}`;
     txtOS.readOnly = true;
+    atualizarTextoBotaoIniciar();
 
     document.querySelectorAll('[id^="avulso-"]').forEach(btn => {
         btn.style.background = 'white';
@@ -761,6 +829,7 @@ window.limparSelecaoAvulso = function() {
         btn.style.color = '#374151';
         btn.style.borderColor = '#e5e7eb';
     });
+    atualizarTextoBotaoIniciar();
 }
 
 carregarServicosAvulsos();
