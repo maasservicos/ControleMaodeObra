@@ -76,6 +76,26 @@ function resolverCodigoInicio(osDigitado) {
     return 1;
 }
 
+// Confere no banco (não só no estado da tela) se o último registro desta
+// Matrícula+O.S. exata é um Início/Retorno em aberto. Consulta de novo em vez de
+// confiar em `ultimoRegistroMatricula` porque o campo O.S. pode ter sido trocado
+// depois do blur (ex: clique num chip de avulso) sem passar de novo pelo blur.
+async function existeInicioAbertoNestaOS() {
+    const matricula = Number(txtMatricula.value.trim()).toString();
+    const os = txtOS.value.trim().padStart(6, '0');
+
+    const { data } = await client
+        .from('SistemaOS_Maas')
+        .select('status_cod')
+        .eq('matricula', matricula)
+        .eq('os', os)
+        .order('created_at', { ascending: false })
+        .limit(1)
+        .maybeSingle();
+
+    return !!data && (Number(data.status_cod) === 1 || Number(data.status_cod) === 4);
+}
+
 listaApontamentos.addEventListener('click', function(e) {
     const btn = e.target.closest('.btn-excluir-apontamento');
     if (!btn) return;
@@ -140,6 +160,10 @@ function ativarModoTrabalhando(dados) {
     txtOS.readOnly = true ;
     painelDados.disabled = true;
     txtOS.value = dados.os;
+    // Chips de avulso não podem ficar clicáveis aqui: senão dava pra trocar o valor de
+    // txtOS no meio da sessão (o campo é só readOnly, não disabled) sem passar de novo
+    // pelo blur da matrícula, e o próximo clique em "Término" salvava com o O.S. errado.
+    document.querySelectorAll('[id^="avulso-"]').forEach(btn => btn.disabled = true);
     atualizarTextoBotaoTermino(dados.os);
     mostrarAviso("O.S em Andamento", `O.S. ${dados.os} iniciada.`);
 }
@@ -154,6 +178,7 @@ function ativarModoPausado(dados) {
     txtOS.readOnly = true ;
     painelDados.disabled = true;
     txtOS.value = dados.os;
+    document.querySelectorAll('[id^="avulso-"]').forEach(btn => btn.disabled = true);
     const motivos = { 2: 'Aguardando Peças', 3: 'Intervalo', 6: 'Pausa' };
     const motivo = motivos[Number(dados.status_cod)] || 'Pausada';
     mostrarAviso(`O.S ${motivo}`, `Aguardando retorno para continuar o serviço.`);
@@ -516,6 +541,20 @@ window.definirAcao = async function(codigoStatus) {
     }
 
     travado = true;
+
+    // Peças/Intervalo/Término/Pausa/Fim de Expediente só fazem sentido fechando um
+    // período que já está aberto (Início/Retorno). Sem essa checagem, dava pra gravar
+    // um registro órfão (ex: campo O.S. trocado no meio da sessão) — exatamente o
+    // padrão que o KPI de Erros detectava depois como "apontado sem Início/Retorno
+    // anterior". Agora a checagem acontece ANTES de salvar, não só na auditoria.
+    if ([2, 3, 5, 6, 7].includes(codigoStatus)) {
+        const aberto = await existeInicioAbertoNestaOS();
+        if (!aberto) {
+            alert("⚠️ Não há um Início/Retorno em aberto para esta Matrícula/O.S. Verifique se o campo O.S. está correto antes de continuar.");
+            travado = false;
+            return;
+        }
+    }
 
     // Início de O.S: verifica se tem apontamento anterior em aberto na mesma OS
     // Serviço Avulso é individual (não representa um job compartilhado por equipe), então pula essa checagem.

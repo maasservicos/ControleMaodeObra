@@ -5,6 +5,10 @@
 // Limite de horas "em andamento" sem pausa para considerar apontamento suspeito
 export const LIMITE_HORAS_ABERTO = 12;
 
+// Limite de horas "pausado" (Peças/Intervalo/Pausa) sem Retorno — mais folgado que o de
+// "em andamento" porque pausa é mais comum de ficar em aberto por mais tempo (ex: esperando peça chegar).
+export const LIMITE_HORAS_PAUSA_ANTIGA = 24;
+
 // O.S. numérica de verdade (ex: "036849"), diferente de um Serviço Avulso (ex: "SEINFRA - 06/07/2026")
 export function ehOSNumerica(os) {
     return /^\d+$/.test(String(os).trim());
@@ -20,6 +24,7 @@ export const CATEGORIAS_ERRO = {
     apos_termino: 'Apontamento registrado após o Término da O.S.',
     aberto_excedido: 'Ficou em andamento sem pausa (>12h)',
     ainda_aberto: 'Em andamento sem pausa/finalização (>12h)',
+    pausado_muito_tempo: 'Pausada sem retorno (>24h)',
 };
 
 // Reaplica a mesma máquina de estados de calcularHorasTrabalhadas (entrada aberta/fechada),
@@ -35,6 +40,9 @@ export function detectarInconsistencias(historicoOrdenado) {
 
     let entrada = null;
     let finalizado = false;
+    // Desde quando a O.S. está na pausa atual (Peças/Intervalo/Pausa), sem Retorno ainda.
+    // Fica null sempre que um Início/Retorno reabre o período, ou quando finaliza de vez.
+    let pausadaDesde = null;
 
     historicoOrdenado.forEach(registro => {
         const st = Number(registro.status_cod);
@@ -45,6 +53,7 @@ export function detectarInconsistencias(historicoOrdenado) {
             // continuação em outro dia): um novo Início/Retorno inicia um ciclo novo, não é
             // "apontamento após o término" — por isso zera `finalizado` em vez de mantê-lo para sempre.
             finalizado = false;
+            pausadaDesde = null;
             if (entrada) {
                 const rotulo = st === 1 ? 'Início' : 'Retorno';
                 erros.push({ item: registro, os: osRef, matricula: matriculaRef, categoria: 'duplicidade', motivo: `${rotulo} apontado em duplicidade, sem pausa/término do período anterior` });
@@ -75,6 +84,9 @@ export function detectarInconsistencias(historicoOrdenado) {
                 }
             }
             entrada = null;
+            // Pausas (2/3/6) marcam desde quando está parada; Término/Fim de Expediente (5/7)
+            // encerram o ciclo, não é mais uma "pausa pendente de retorno".
+            pausadaDesde = (st === 2 || st === 3 || st === 6) ? dataReg : null;
             // "Encerrado por continuidade" é um handoff administrativo (outro colaborador assumiu a O.S.),
             // não uma finalização real do job — não deve travar uma reabertura legítima depois.
             if (st === 5 && registro.obs !== 'Encerrado por continuidade') finalizado = true;
@@ -86,6 +98,14 @@ export function detectarInconsistencias(historicoOrdenado) {
         const horasAberto = (new Date() - entrada) / (1000 * 60 * 60);
         if (horasAberto > LIMITE_HORAS_ABERTO) {
             erros.push({ item: null, os: osRef, matricula: matriculaRef, categoria: 'ainda_aberto', dataAbertura: entrada.toISOString(), motivo: `Em andamento há ${horasAberto.toFixed(1)}h sem pausa/finalização (limite ${LIMITE_HORAS_ABERTO}h)` });
+        }
+    }
+
+    // Ainda pausada (Peças/Intervalo/Pausa) sem Retorno até agora
+    if (pausadaDesde) {
+        const horasPausado = (new Date() - pausadaDesde) / (1000 * 60 * 60);
+        if (horasPausado > LIMITE_HORAS_PAUSA_ANTIGA) {
+            erros.push({ item: null, os: osRef, matricula: matriculaRef, categoria: 'pausado_muito_tempo', dataAbertura: pausadaDesde.toISOString(), motivo: `Pausada há ${horasPausado.toFixed(1)}h sem retorno (limite ${LIMITE_HORAS_PAUSA_ANTIGA}h)` });
         }
     }
 

@@ -13,10 +13,28 @@ function esc(str) {
 
 // --- ELEMENTOS ---
 const tabela = document.getElementById('tabelaDashboard');
-const kpiTotal = document.getElementById('kpiTotal');
-const kpiAndamento = document.getElementById('kpiAndamento');
-const kpiPausadas = document.getElementById('kpiPausadas');
-const kpiFinalizadas = document.getElementById('kpiFinalizadas');
+
+// KPIs — dois conjuntos independentes (O.S. real x Serviço Avulso), nunca somados juntos.
+const kpiEls = {
+    OS: {
+        total: document.getElementById('kpiTotalOS'),
+        andamento: document.getElementById('kpiAndamentoOS'),
+        pausadas: document.getElementById('kpiPausadasOS'),
+        finalizadas: document.getElementById('kpiFinalizadasOS'),
+        erros: document.getElementById('kpiErrosOS'),
+    },
+    AVULSO: {
+        total: document.getElementById('kpiTotalAvulso'),
+        andamento: document.getElementById('kpiAndamentoAvulso'),
+        pausadas: document.getElementById('kpiPausadasAvulso'),
+        finalizadas: document.getElementById('kpiFinalizadasAvulso'),
+        erros: document.getElementById('kpiErrosAvulso'),
+    },
+};
+const cardIds = {
+    OS: { TODOS: 'cardTotalOS', ANDAMENTO: 'cardAndamentoOS', PAUSADAS: 'cardPausadasOS', FINALIZADAS: 'cardFinalizadasOS', ERROS: 'cardErrosOS' },
+    AVULSO: { TODOS: 'cardTotalAvulso', ANDAMENTO: 'cardAndamentoAvulso', PAUSADAS: 'cardPausadasAvulso', FINALIZADAS: 'cardFinalizadasAvulso', ERROS: 'cardErrosAvulso' },
+};
 
 // Filtros
 const dtInicio = document.getElementById('dashDtInicio');
@@ -27,8 +45,12 @@ const selTipoOS = document.getElementById('dashTipoOS');
 
 // Filtro rápido O.S. x Serviço Avulso — client-side, sobre os dados já carregados
 // (não recarrega do Supabase, igual aos cards de KPI e às pílulas de categoria de erro).
+// Também recalcula o resumo de categorias, já que ele reflete o Tipo selecionado no momento.
 if (selTipoOS) {
-    selTipoOS.addEventListener('change', renderizarTabelaPrincipal);
+    selTipoOS.addEventListener('change', function() {
+        renderizarResumoErros();
+        renderizarTabelaPrincipal();
+    });
 }
 
 // Modal
@@ -37,7 +59,6 @@ const lblOSModal = document.getElementById('lblOSModal');
 const tabelaHist = document.getElementById('tabelaHistorico');
 const alertaErrosModal = document.getElementById('alertaErrosModal');
 const resumoAvulsoModal = document.getElementById('resumoAvulsoModal');
-const kpiErros = document.getElementById('kpiErros');
 
 // Variáveis Globais
 let dadosBrutos = [];
@@ -55,9 +76,9 @@ let mapaHistoricoOS = {};
 let mapaErros = {};
 let osComErro = new Set();
 let filtroKPIAtual = 'TODOS';
-// Quebra do KPI "Erros" por categoria (ver CATEGORIAS_ERRO em erros.js), pra responder
-// "de N erros, quantos são de cada tipo" sem precisar abrir cada O.S. uma por uma.
-let contagemPorCategoria = {};
+// Lista bruta de todos os erros detectados (cada um com .categoria e .os) — o resumo
+// por categoria é recalculado dela na hora, filtrado pelo Tipo (O.S./Avulso) atual.
+let todosOsErros = [];
 let osPorCategoria = {};
 let filtroCategoriaErro = null;
 
@@ -99,32 +120,53 @@ window.limparFiltros = function() {
     carregarDashboard();
 }
 
+// --- TOGGLE ENTRE AS DUAS FILEIRAS DE KPI (O.S. x Serviço Avulso) ---
+// Só uma fileira fica visível por vez. Reaproveita filtrarKPI() pra também ajustar
+// o filtro Tipo, re-destacar o card certo e recalcular o resumo de erros.
+window.mostrarKpiTipo = function(tipo) {
+    const secOS = document.getElementById('kpiSectionOS');
+    const secAvulso = document.getElementById('kpiSectionAvulso');
+    if (secOS) secOS.classList.toggle('hidden', tipo !== 'OS');
+    if (secAvulso) secAvulso.classList.toggle('hidden', tipo !== 'AVULSO');
+
+    document.querySelectorAll('.kpi-toggle-btn').forEach(btn => {
+        btn.classList.toggle('active', btn.dataset.tipo === tipo);
+    });
+
+    filtrarKPI(filtroKPIAtual, filtroCategoriaErro, tipo);
+}
+
 // --- FILTRO DE KPI (VISUAL COM CSS PURO) ---
 // `categoria` só faz sentido junto com tipo 'ERROS' — vem do clique num item do
 // resumo (ex: "Ainda aberto"), pra restringir a tabela só àquele tipo de erro.
-window.filtrarKPI = function(tipo, categoria) {
+// `tipoOS` ('OS' ou 'AVULSO') vem do clique num card de uma das duas fileiras de KPI —
+// ele também ajusta o filtro "Tipo" pra combinar com a fileira clicada. Quando omitido
+// (ex: clique numa pílula de categoria), o Tipo atual não é mexido.
+window.filtrarKPI = function(tipo, categoria, tipoOS) {
     filtroKPIAtual = tipo;
     filtroCategoriaErro = tipo === 'ERROS' ? (categoria || null) : null;
+    if (tipoOS && selTipoOS) selTipoOS.value = tipoOS;
+
     resetarEstilosCards();
 
-    const mapIds = { 'TODOS': 'cardTotal', 'ANDAMENTO': 'cardAndamento', 'PAUSADAS': 'cardPausadas', 'FINALIZADAS': 'cardFinalizadas', 'ERROS': 'cardErros' };
-    const cardId = mapIds[tipo];
-
-    const el = document.getElementById(cardId);
-    if(el) {
-        // Usa a classe .active definida no CSS novo (simula o ring do tailwind)
-        el.classList.add('active');
+    // Só destaca um card se o Tipo atual for especificamente O.S. ou Avulso — não existe
+    // mais um card "combinado", então com Tipo="Todos" nenhum card fica marcado como ativo.
+    const tipoAtivo = selTipoOS ? selTipoOS.value : 'TODOS';
+    if (cardIds[tipoAtivo]) {
+        const cardId = cardIds[tipoAtivo][tipo];
+        const el = cardId ? document.getElementById(cardId) : null;
+        if (el) el.classList.add('active');
     }
 
     // O resumo por categoria só faz sentido (e só aparece) quando o filtro "Erros" está ativo.
     if (resumoErrosKPI) resumoErrosKPI.classList.toggle('hidden', tipo !== 'ERROS');
 
-    atualizarEstiloResumoErros();
+    renderizarResumoErros();
     renderizarTabelaPrincipal();
 }
 
 function resetarEstilosCards() {
-    ['cardTotal', 'cardAndamento', 'cardPausadas', 'cardFinalizadas', 'cardErros'].forEach(id => {
+    Object.values(cardIds.OS).concat(Object.values(cardIds.AVULSO)).forEach(id => {
         const el = document.getElementById(id);
         if (el) el.classList.remove('active');
     });
@@ -135,6 +177,42 @@ function atualizarEstiloResumoErros() {
     resumoErrosKPI.querySelectorAll('.resumo-erro-item').forEach(btn => {
         btn.classList.toggle('active', btn.dataset.categoria === filtroCategoriaErro);
     });
+}
+
+// O Supabase/PostgREST limita cada resposta a 1000 linhas por padrão. Sem paginação,
+// carregarDashboard() só via os 1000 registros mais recentes e silenciosamente cortava
+// o resto — o que gerava "erros fantasma" (ex: Término aparecendo sem o Início real,
+// que tinha ficado de fora do corte) em qualquer intervalo com mais de 1000 apontamentos.
+async function buscarTodosApontamentos({ inicio, fim, matricula, os }) {
+    const pageSize = 1000;
+    let from = 0;
+    let todos = [];
+
+    while (true) {
+        // Desempate por `id` (chave única) além de `created_at`: dois registros podem ter
+        // o mesmo timestamp (inserts muito próximos), e sem um critério de desempate a
+        // ordem entre páginas não é garantida — o que poderia pular ou duplicar linhas.
+        let query = client.from('SistemaOS_Maas')
+            .select('*')
+            .eq('excluido_dashboard', false)
+            .order('created_at', { ascending: false })
+            .order('id', { ascending: false })
+            .range(from, from + pageSize - 1);
+
+        if (inicio) query = query.gte('created_at', inicio + ' 00:00:00');
+        if (fim) query = query.lte('created_at', fim + ' 23:59:59');
+        if (matricula) query = query.eq('matricula', matricula);
+        if (os) query = query.ilike('os', `%${os}%`);
+
+        const { data, error } = await query;
+        if (error) throw error;
+
+        todos = todos.concat(data || []);
+        if (!data || data.length < pageSize) break;
+        from += pageSize;
+    }
+
+    return todos;
 }
 
 // --- CARREGAMENTO DE DADOS ---
@@ -162,20 +240,7 @@ window.carregarDashboard = async function() {
         // 2. Busca Histórico
         // Exclui registros marcados como excluido_dashboard (duplo-clique, testes):
         // permanecem no banco, só não aparecem aqui.
-        let query = client.from('SistemaOS_Maas')
-            .select('*')
-            .eq('excluido_dashboard', false)
-            .order('created_at', { ascending: false });
-
-        if (inicio) query = query.gte('created_at', inicio + ' 00:00:00');
-        if (fim) query = query.lte('created_at', fim + ' 23:59:59');
-        if (matricula) query = query.eq('matricula', matricula);
-        if (os) query = query.ilike('os', `%${os}%`);
-
-        const { data, error } = await query; 
-        if (error) throw error;
-
-        dadosBrutos = data || [];
+        dadosBrutos = await buscarTodosApontamentos({ inicio, fim, matricula, os });
 
         // 3. Processa
         processarDados(); 
@@ -214,8 +279,8 @@ function processarDados() {
 function processarErros() {
     mapaErros = {};
     const novoOsComErro = new Set();
-    const novaContagemPorCategoria = {};
     const novoOsPorCategoria = {};
+    const novosTodosErros = [];
 
     Object.keys(mapaHistoricoOS).forEach(chave => {
         const historico = [...mapaHistoricoOS[chave]].sort((a, b) => new Date(a.created_at) - new Date(b.created_at));
@@ -226,7 +291,7 @@ function processarErros() {
             novoOsComErro.add(osStr);
 
             erros.forEach(e => {
-                novaContagemPorCategoria[e.categoria] = (novaContagemPorCategoria[e.categoria] || 0) + 1;
+                novosTodosErros.push(e);
                 if (!novoOsPorCategoria[e.categoria]) novoOsPorCategoria[e.categoria] = new Set();
                 novoOsPorCategoria[e.categoria].add(osStr);
             });
@@ -234,27 +299,39 @@ function processarErros() {
     });
 
     osComErro = novoOsComErro;
-    contagemPorCategoria = novaContagemPorCategoria;
     osPorCategoria = novoOsPorCategoria;
+    todosOsErros = novosTodosErros;
     renderizarResumoErros();
 }
 
 // Quebra clicável do KPI "Erros" por categoria (ex: "67 (77%) Fechado após ficar aberto").
-// Clicar de novo na mesma categoria desmarca (volta a mostrar todos os erros).
+// Clicar de novo na mesma categoria desmarca (volta a mostrar todos os erros). Os números
+// refletem só o Tipo atual (O.S./Avulso/Todos) — já que agora os KPIs de O.S. e Avulso são
+// contados separadamente, o resumo de erros segue a mesma separação.
 function renderizarResumoErros() {
     if (!resumoErrosKPI) return;
 
-    const totalErros = Object.values(contagemPorCategoria).reduce((soma, n) => soma + n, 0);
-    if (totalErros === 0) {
+    const tipoAtivo = selTipoOS ? selTipoOS.value : 'TODOS';
+    const errosFiltrados = todosOsErros.filter(e => {
+        if (tipoAtivo === 'OS') return ehOSNumerica(e.os);
+        if (tipoAtivo === 'AVULSO') return !ehOSNumerica(e.os);
+        return true;
+    });
+
+    if (errosFiltrados.length === 0) {
         resumoErrosKPI.innerHTML = '';
+        atualizarEstiloResumoErros();
         return;
     }
 
+    const contagem = {};
+    errosFiltrados.forEach(e => { contagem[e.categoria] = (contagem[e.categoria] || 0) + 1; });
+
     resumoErrosKPI.innerHTML = Object.entries(CATEGORIAS_ERRO)
-        .filter(([categoria]) => contagemPorCategoria[categoria] > 0)
+        .filter(([categoria]) => contagem[categoria] > 0)
         .map(([categoria, label]) => {
-            const n = contagemPorCategoria[categoria];
-            const pct = Math.round((n / totalErros) * 100);
+            const n = contagem[categoria];
+            const pct = Math.round((n / errosFiltrados.length) * 100);
             return `<button type="button" class="resumo-erro-item" data-categoria="${categoria}">${n} (${pct}%) ${esc(label)}</button>`;
         })
         .join('');
@@ -309,22 +386,18 @@ function calcularMetricasMO(matricula, os) {
     };
 }
 
-function calcularKPIs() {
-    if (!dadosBrutos.length) {
-        atualizarKPIs(0,0,0,0,0);
-        return;
-    }
-
-    const osStatusMap = {}; 
+// Calcula os 5 números (Total/Andamento/Pausadas/Finalizadas/Erros) só pra um dos dois
+// tipos por vez — O.S. real e Serviço Avulso nunca são somados juntos em nenhum KPI.
+function calcularKPIsPorTipo(pertenceAoTipo) {
+    const osStatusMap = {};
     dadosResumidos.forEach(item => {
+        if (!pertenceAoTipo(item.os)) return;
         if (!osStatusMap[item.os]) osStatusMap[item.os] = [];
         osStatusMap[item.os].push(Number(item.status_cod));
     });
 
-    let countAndamento = 0;
-    let countPausadas = 0;
-    let countFinalizadas = 0;
-    let totalOSUnicas = Object.keys(osStatusMap).length;
+    let andamento = 0, pausadas = 0, finalizadas = 0;
+    const total = Object.keys(osStatusMap).length;
 
     for (const os in osStatusMap) {
         const statuses = osStatusMap[os];
@@ -332,12 +405,18 @@ function calcularKPIs() {
         const alguemPausado = statuses.some(s => s === 2 || s === 3 || s === 6);
         const todosFinalizados = statuses.every(s => s === 5 || s === 7);
 
-        if (alguemTrabalhando) countAndamento++;
-        else if (alguemPausado) countPausadas++;
-        else if (todosFinalizados) countFinalizadas++;
+        if (alguemTrabalhando) andamento++;
+        else if (alguemPausado) pausadas++;
+        else if (todosFinalizados) finalizadas++;
     }
 
-    atualizarKPIs(totalOSUnicas, countAndamento, countPausadas, countFinalizadas, osComErro.size);
+    const erros = [...osComErro].filter(pertenceAoTipo).length;
+    return { total, andamento, pausadas, finalizadas, erros };
+}
+
+function calcularKPIs() {
+    atualizarKPIs('OS', calcularKPIsPorTipo(ehOSNumerica));
+    atualizarKPIs('AVULSO', calcularKPIsPorTipo(os => !ehOSNumerica(os)));
 }
 
 // COPIE DAQUI 👇
@@ -439,12 +518,14 @@ function renderizarTabelaPrincipal() {
     }
 }
 
-function atualizarKPIs(t, a, p, f, e) {
-    if(kpiTotal) kpiTotal.innerText = t;
-    if(kpiAndamento) kpiAndamento.innerText = a;
-    if(kpiPausadas) kpiPausadas.innerText = p;
-    if(kpiFinalizadas) kpiFinalizadas.innerText = f;
-    if(kpiErros) kpiErros.innerText = e;
+function atualizarKPIs(tipo, stats) {
+    const els = kpiEls[tipo];
+    if (!els) return;
+    if (els.total) els.total.innerText = stats.total;
+    if (els.andamento) els.andamento.innerText = stats.andamento;
+    if (els.pausadas) els.pausadas.innerText = stats.pausadas;
+    if (els.finalizadas) els.finalizadas.innerText = stats.finalizadas;
+    if (els.erros) els.erros.innerText = stats.erros;
 }
 
 window.verHistorico = async function(osAlvo) {

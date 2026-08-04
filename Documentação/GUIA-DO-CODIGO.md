@@ -98,6 +98,7 @@ txtMatricula.addEventListener('blur', async function() { ... });
    - `1` ou `4` → `ativarModoTrabalhando()`
    - `3` → `ativarModoPausado()`
    - Outros (`2`, `5`, `6`, `7`) → `ativarModoLivre()` com aviso
+5. Chama `carregarLista()` para mostrar o histórico recente
 
 ### Validação de matrícula (`matriculaValida`)
 
@@ -121,7 +122,28 @@ Não basta impedir o clique em `definirAcao()` — se a matrícula não existe, 
 - **`bloquearPorMatriculaInvalida()`** — chamada no ramo `!func` do `blur`. Desabilita o campo O.S. (`txtOS.disabled = true`), todos os chips de Serviço Avulso (`[id^="avulso-"]`) e o botão `#btnIniciarAcao`; em seguida devolve o foco pro campo de matrícula (`focus()` + `select()`, pra já deixar o número errado selecionado e fácil de substituir).
 - **`desbloquearCamposLivres()`** — o oposto; chamada assim que uma matrícula válida é encontrada, e também dentro de `ativarModoLivre()` (que roda sempre que a tela volta pro estado "pronta pra nova matrícula", inclusive no "Limpar Tela").
 - Os botões de Pausa/Intervalo/Peças/Retorno/Fim de Expediente/Término não precisam desse bloqueio adicional: eles só ficam visíveis dentro de `ativarModoTrabalhando`/`ativarModoPausado`, que só são chamados depois que a matrícula já foi validada.
-5. Chama `carregarLista()` para mostrar o histórico recente
+
+### Bloqueio de fechamento sem Início/Retorno aberto (`existeInicioAbertoNestaOS`)
+
+Até aqui, "Peças apontado sem Início/Retorno anterior" (e variações pra Intervalo/Término/Pausa/Fim de Expediente) só era **detectado depois**, pelo KPI de Erros — o registro órfão já tinha sido salvo. Investigando O.S. reais, o mecanismo mais provável era: o colaborador fica em "Trabalhando"/"Pausado" (`txtOS` com `readOnly = true`, mostrando a O.S. certa), mas os **chips de Serviço Avulso continuavam clicáveis** mesmo nesse estado — um clique num chip sobrescrevia `txtOS.value` pra um avulso novo (sem nenhum histórico), e o próximo clique em "Término"/"Pausa" salvava esse valor errado.
+
+Duas camadas de correção:
+
+1. **Causa raiz**: `ativarModoTrabalhando()` e `ativarModoPausado()` agora desabilitam os chips de avulso (`document.querySelectorAll('[id^="avulso-"]').forEach(btn => btn.disabled = true)`). Só voltam a ficar clicáveis em `desbloquearCamposLivres()` (chamada por `ativarModoLivre()`), quando não há mais uma O.S. "trava" na tela.
+2. **Trava explícita em `definirAcao()`**: pra qualquer código de fechamento (`2` Peças, `3` Intervalo, `5` Término, `6` Pausa, `7` Fim de Expediente — não se aplica a `1` Início nem `4` Retorno, que são códigos de abertura), o sistema consulta de novo o banco (`existeInicioAbertoNestaOS()`) — não confia só no estado da tela — pra confirmar que o último registro daquela Matrícula+O.S. exata é mesmo um Início/Retorno em aberto. Se não for, bloqueia com alerta e libera a trava de duplo-clique (`travado = false`) sem salvar nada.
+
+```javascript
+if ([2, 3, 5, 6, 7].includes(codigoStatus)) {
+    const aberto = await existeInicioAbertoNestaOS();
+    if (!aberto) {
+        alert("⚠️ Não há um Início/Retorno em aberto para esta Matrícula/O.S. ...");
+        travado = false;
+        return;
+    }
+}
+```
+
+Isso não muda a regra do KPI de Erros em si (`detectarInconsistencias` continua igual, pra pegar qualquer coisa que escape por outro caminho) — só impede a causa mais comum de acontecer na origem.
 
 ---
 
@@ -256,13 +278,17 @@ Repete a mesma máquina de estados de `calcularHorasTrabalhadas` (entrada aberta
 | Qualquer apontamento novo depois de um Término (`5`) numa **O.S. numérica** | "Apontamento registrado após o Término da O.S." |
 | Período aberto há mais de `LIMITE_HORAS_ABERTO` (12h) sem pausa | "Ficou X.Xh em andamento sem pausa (limite 12h)" |
 | Ainda em aberto até agora, já passando de 12h | "Em andamento há X.Xh sem pausa/finalização" |
+| Ainda pausada (Peças/Intervalo/Pausa) até agora, passando de `LIMITE_HORAS_PAUSA_ANTIGA` (24h) sem Retorno | "Pausada há X.Xh sem retorno (limite 24h)" |
 
 **Duas exceções importantes na regra:**
 - **Serviço Avulso** (`ehOSNumerica` retorna `false` para nomes como `"SEINFRA"`) pode ter várias rodadas Início→Término no mesmo dia — não é tratado como "apontamento após o término".
 - **`obs === 'Encerrado por continuidade'`** — registro inserido automaticamente pelo sistema quando outro colaborador assume a mesma O.S./avulso (ver `confirmarContinuacao` em `operacional.js`). Não é uma ação do colaborador, então nunca vira "erro" nem conta como "ficou X horas aberto".
 
+A regra de pausa antiga usa a variável interna `pausadaDesde` (timestamp do último status `2`/`3`/`6`), zerada sempre que um novo Início/Retorno reabre o período. É simétrica à variável `entrada` (que rastreia o período "em andamento"), só que pro estado "pausado" — as duas nunca ficam preenchidas ao mesmo tempo.
+
 ### Outras exportações
-- `LIMITE_HORAS_ABERTO` — constante (12 horas), usada nas duas regras de "tempo aberto demais".
+- `LIMITE_HORAS_ABERTO` — constante (12 horas), limite pras duas regras de "tempo **trabalhando** aberto demais" (`aberto_excedido` e `ainda_aberto`).
+- `LIMITE_HORAS_PAUSA_ANTIGA` — constante (24 horas), limite pra "tempo **pausado** aberto demais" (`pausado_muito_tempo`). Mais folgado que o de trabalho porque pausa (ex: esperando peça chegar) costuma legitimamente durar mais.
 - `ehOSNumerica(os)` — `true` se o valor da O.S. for só dígitos (O.S. real) vs. nome de Serviço Avulso.
 - `isoParaDatetimeLocalBRT(isoUTC)` / `datetimeLocalBRTParaISO(valor)` — conversão entre o formato ISO (UTC, como salvo no banco) e o formato do `<input type="datetime-local">`, sempre assumindo Brasília (UTC-3) fixo, usadas nos modais de edição/correção de apontamento.
 
@@ -296,11 +322,20 @@ carregarDashboard()
     │
     ├── calcularKPIs()
     │       └── Conta O.S. únicas e classifica: Andamento / Pausadas / Finalizadas
+    │           (duas vezes: uma só com O.S. real, outra só com Serviço Avulso)
     │
     └── filtrarKPI('TODOS') → renderizarTabelaPrincipal()
 ```
 
 A busca em `SistemaOS_Maas` sempre filtra `.eq('excluido_dashboard', false)` — registros com esse soft-delete marcado (ver seção "Soft-delete" abaixo) somam-se ao histórico do banco, mas nunca aparecem no dashboard.
+
+### Paginação da busca (`buscarTodosApontamentos`)
+
+O Supabase/PostgREST limita cada resposta a **1000 linhas por padrão**. Antes, `carregarDashboard()` fazia uma única `.select('*')` sem `.range()`, então qualquer busca (mesmo "sem filtro nenhum") só trazia os 1000 registros mais recentes — cortando silenciosamente o resto. Isso gerava **erros fantasma**: um registro cujo par (Início ou Término) tivesse ficado de fora do corte aparecia sozinho na tela, com tempo `00:00:00` e um alerta de "sem Início/Retorno anterior" que não existe de verdade no banco (o par completo existe, só que um dos dois lados ficou fora da página carregada).
+
+`buscarTodosApontamentos({ inicio, fim, matricula, os })` resolve isso paginando em blocos de 1000 (`.range(from, from + 999)`) até a página vir com menos de 1000 linhas, acumulando tudo antes de processar. Os mesmos filtros de data/matrícula/O.S. são aplicados em cada página. Qualquer nova tela que busque `SistemaOS_Maas` sem um filtro que já limite o resultado (por matrícula, por O.S. específica, etc.) deve usar o mesmo padrão — do contrário volta a ter esse corte silencioso conforme a tabela cresce.
+
+**Importante:** a ordenação usa `created_at` **e** `id` (`.order('created_at', {ascending:false}).order('id', {ascending:false})`). Só `created_at` não é suficiente como critério de paginação: dois registros podem ter o mesmo timestamp (inserts muito próximos), e sem um desempate único a ordem entre páginas não é garantida pelo Postgres — o que pode pular ou duplicar linhas entre uma página e outra. `id` é chave única, então garante uma ordem total estável.
 
 ### `calcularMetricasMO(matricula, os)`
 
@@ -311,6 +346,15 @@ custoTotal = ehOSNumerica(os) ? horasDecimais * valorHora : 0
 ```
 
 **Serviço Avulso não gera custo** — só O.S. numérica (`ehOSNumerica`, de `js/erros.js`) tem `custoTotal` calculado; para avulso o valor é sempre `0` e a célula de custo na tabela/Excel fica em branco (não "R$ 0,00", pra não parecer erro de cálculo).
+
+### KPIs separados: O.S. x Serviço Avulso (`calcularKPIsPorTipo`)
+
+O.S. real e Serviço Avulso **nunca são somados no mesmo número** — cada um tem sua própria fileira de KPI (Total/Andamento/Pausadas/Finalizadas/Erros), e só uma fileira fica visível por vez, trocada por um toggle ("📋 Ordens de Serviço" / "🔧 Serviços Avulsos") acima dos cards.
+
+- **`calcularKPIsPorTipo(pertenceAoTipo)`** — a mesma lógica de sempre (agrupa `dadosResumidos` por `os`, classifica Andamento/Pausadas/Finalizadas pelos status, conta O.S. com erro via `osComErro`), só que recebe um predicado (`ehOSNumerica` ou o seu inverso) e só considera as O.S. que passam nele. `calcularKPIs()` chama essa função duas vezes e manda o resultado pra `atualizarKPIs('OS', stats)` / `atualizarKPIs('AVULSO', stats)`.
+- **`kpiEls`** e **`cardIds`** — objetos `{ OS: {...}, AVULSO: {...} }` que mapeiam cada métrica ao elemento/`id` certo de cada fileira (ex: `kpiEls.OS.andamento` vs `kpiEls.AVULSO.andamento`), evitando repetir 10 variáveis soltas.
+- **`mostrarKpiTipo(tipo)`** — troca qual `<div id="kpiSectionOS">`/`<div id="kpiSectionAvulso">` fica visível (`.hidden`), marca o botão do toggle certo como `.active`, e reaproveita `filtrarKPI(filtroKPIAtual, filtroCategoriaErro, tipo)` pra também ajustar o filtro Tipo, re-destacar o card certo e recalcular o resumo de erros — sem duplicar essa lógica.
+- **Clicar num card** chama `filtrarKPI(statusFiltro, categoria, tipoOS)` com `tipoOS` = `'OS'` ou `'AVULSO'` — isso ajusta o filtro "Tipo" (`#dashTipoOS`) pra combinar automaticamente com a fileira clicada, e só destaca o card daquela fileira (não existe mais um card "combinado"). O resumo de categorias de erro (`renderizarResumoErros()`) também é recalculado toda vez que o Tipo muda — os números das pílulas refletem só o tipo selecionado no momento (O.S., Avulso, ou os dois juntos se o Tipo estiver em "Todos").
 
 ### KPI "Erros" (`processarErros`, `mapaErros`, `osComErro`)
 
@@ -333,12 +377,12 @@ function processarErros() {
 - **`osComErro`** (Set de números de O.S.) é o que popula o KPI "Erros" (`kpiErros`, em `atualizarKPIs`) e o filtro `filtrarKPI('ERROS')` na tabela principal — uma O.S. entra nesse Set assim que **qualquer** colaborador nela tiver pelo menos um erro.
 - **Alterar as regras do KPI de Erros = alterar `detectarInconsistencias` em `js/erros.js`** (é o único lugar onde a lógica vive; dashboard e operacional só consomem o resultado).
 
-### Resumo por categoria (`resumoErrosKPI`, `contagemPorCategoria`, `osPorCategoria`)
+### Resumo por categoria (`resumoErrosKPI`, `todosOsErros`, `osPorCategoria`)
 
 Cada erro devolvido por `detectarInconsistencias` tem um campo `categoria` (slug estável, ex: `aberto_excedido`) além do `motivo` (texto livre com números variáveis) — ver `CATEGORIAS_ERRO` em `js/erros.js` pros 5 valores possíveis. O label de cada categoria é o próprio texto do `motivo` daquela regra, só sem a parte numérica (que muda a cada caso, tipo "23.0h") — assim a pílula do resumo usa a mesma linguagem que já aparece no ⚠️ da tabela e no alerta do modal de histórico, em vez de um nome inventado à parte.
 
 `processarErros()` também monta:
-- **`contagemPorCategoria`** — `{ categoria: quantidade de erros brutos }`, usado só pra calcular o `%` de cada pílula.
+- **`todosOsErros`** — lista bruta com todos os erros detectados (cada um mantendo `.categoria` e `.os`). A contagem por categoria/porcentagem **não** é guardada pronta — `renderizarResumoErros()` filtra essa lista pelo Tipo atual (`#dashTipoOS`: O.S./Avulso/Todos) toda vez que renderiza, então as pílulas sempre refletem só o tipo selecionado no momento (consistente com os KPIs de Erros separados por fileira).
 - **`osPorCategoria`** — `{ categoria: Set de O.S. }`, usado pra filtrar a tabela quando uma pílula está selecionada.
 
 **`renderizarResumoErros()`** desenha uma pílula clicável por categoria presente (ex: "67 (77%) Ficou em andamento sem pausa (>12h)") dentro do card de filtros (`#resumoErrosKPI` em `dashboard.html`), e só fica visível quando o filtro "Erros" está ativo. Clicar numa pílula chama `filtrarKPI('ERROS', categoria)`, que:
