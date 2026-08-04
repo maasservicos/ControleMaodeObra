@@ -94,6 +94,8 @@
         </div>
 
         <div class="filters-box">
+            <div id="resumoErrosKPI" class="resumo-erros-row hidden"></div>
+
             <div class="filter-inputs">
                 <div class="input-group">
                     <label class="input-label">Data Início</label>
@@ -106,6 +108,14 @@
                 <div class="input-group">
                     <label class="input-label">O.S</label>
                     <input type="number" id="dashOS" placeholder="Todas" class="input-field" style="width: auto;">
+                </div>
+                <div class="input-group">
+                    <label class="input-label">Tipo</label>
+                    <select id="dashTipoOS" class="input-field" style="width: auto;">
+                        <option value="TODOS">Todos</option>
+                        <option value="OS">Só O.S.</option>
+                        <option value="AVULSO">Só Avulso</option>
+                    </select>
                 </div>
                 <div class="input-group">
                     <label class="input-label">Matrícula</label>

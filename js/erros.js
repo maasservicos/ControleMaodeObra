@@ -10,6 +10,18 @@ export function ehOSNumerica(os) {
     return /^\d+$/.test(String(os).trim());
 }
 
+// Categorias estáveis (slugs) de cada tipo de inconsistência que detectarInconsistencias
+// pode gerar — usadas pra agrupar/filtrar no dashboard sem precisar reconhecer o texto do
+// `motivo` (que tem números variáveis, tipo "Ficou 23.0h..."). O label de cada categoria é o
+// próprio texto do `motivo` daquela regra, só sem a parte numérica (horas), que muda a cada caso.
+export const CATEGORIAS_ERRO = {
+    duplicidade: 'Início/Retorno apontado em duplicidade',
+    sem_inicio: 'Apontado sem Início/Retorno anterior',
+    apos_termino: 'Apontamento registrado após o Término da O.S.',
+    aberto_excedido: 'Ficou em andamento sem pausa (>12h)',
+    ainda_aberto: 'Em andamento sem pausa/finalização (>12h)',
+};
+
 // Reaplica a mesma máquina de estados de calcularHorasTrabalhadas (entrada aberta/fechada),
 // mas em vez de somar tempo, sinaliza transições que não deveriam acontecer.
 export function detectarInconsistencias(historicoOrdenado) {
@@ -35,14 +47,14 @@ export function detectarInconsistencias(historicoOrdenado) {
             finalizado = false;
             if (entrada) {
                 const rotulo = st === 1 ? 'Início' : 'Retorno';
-                erros.push({ item: registro, os: osRef, matricula: matriculaRef, motivo: `${rotulo} apontado em duplicidade, sem pausa/término do período anterior` });
+                erros.push({ item: registro, os: osRef, matricula: matriculaRef, categoria: 'duplicidade', motivo: `${rotulo} apontado em duplicidade, sem pausa/término do período anterior` });
             }
             entrada = dataReg;
         } else if (st === 2 || st === 3 || st === 5 || st === 6 || st === 7) {
             // Serviço Avulso pode ter várias rodadas (Início > Término > Início de novo) no mesmo dia — isso é normal.
             // Só se aplica a O.S. numéricas de verdade, que representam um único job.
             if (finalizado && osNumerica) {
-                erros.push({ item: registro, os: osRef, matricula: matriculaRef, motivo: 'Apontamento registrado após o Término da O.S.' });
+                erros.push({ item: registro, os: osRef, matricula: matriculaRef, categoria: 'apos_termino', motivo: 'Apontamento registrado após o Término da O.S.' });
             }
 
             // "Encerrado por continuidade" é inserido automaticamente pelo sistema quando outro
@@ -54,12 +66,12 @@ export function detectarInconsistencias(historicoOrdenado) {
 
             if (!entrada) {
                 if (!encerramentoPorContinuidade) {
-                    erros.push({ item: registro, os: osRef, matricula: matriculaRef, motivo: `${nomesFechamento[st]} apontado sem Início/Retorno anterior` });
+                    erros.push({ item: registro, os: osRef, matricula: matriculaRef, categoria: 'sem_inicio', motivo: `${nomesFechamento[st]} apontado sem Início/Retorno anterior` });
                 }
             } else {
                 const horasAberto = (dataReg - entrada) / (1000 * 60 * 60);
                 if (horasAberto > LIMITE_HORAS_ABERTO && !encerramentoPorContinuidade) {
-                    erros.push({ item: registro, os: osRef, matricula: matriculaRef, motivo: `Ficou ${horasAberto.toFixed(1)}h em andamento sem pausa (limite ${LIMITE_HORAS_ABERTO}h)` });
+                    erros.push({ item: registro, os: osRef, matricula: matriculaRef, categoria: 'aberto_excedido', motivo: `Ficou ${horasAberto.toFixed(1)}h em andamento sem pausa (limite ${LIMITE_HORAS_ABERTO}h)` });
                 }
             }
             entrada = null;
@@ -73,7 +85,7 @@ export function detectarInconsistencias(historicoOrdenado) {
     if (entrada && !finalizado) {
         const horasAberto = (new Date() - entrada) / (1000 * 60 * 60);
         if (horasAberto > LIMITE_HORAS_ABERTO) {
-            erros.push({ item: null, os: osRef, matricula: matriculaRef, dataAbertura: entrada.toISOString(), motivo: `Em andamento há ${horasAberto.toFixed(1)}h sem pausa/finalização (limite ${LIMITE_HORAS_ABERTO}h)` });
+            erros.push({ item: null, os: osRef, matricula: matriculaRef, categoria: 'ainda_aberto', dataAbertura: entrada.toISOString(), motivo: `Em andamento há ${horasAberto.toFixed(1)}h sem pausa/finalização (limite ${LIMITE_HORAS_ABERTO}h)` });
         }
     }
 

@@ -333,6 +333,27 @@ function processarErros() {
 - **`osComErro`** (Set de números de O.S.) é o que popula o KPI "Erros" (`kpiErros`, em `atualizarKPIs`) e o filtro `filtrarKPI('ERROS')` na tabela principal — uma O.S. entra nesse Set assim que **qualquer** colaborador nela tiver pelo menos um erro.
 - **Alterar as regras do KPI de Erros = alterar `detectarInconsistencias` em `js/erros.js`** (é o único lugar onde a lógica vive; dashboard e operacional só consomem o resultado).
 
+### Resumo por categoria (`resumoErrosKPI`, `contagemPorCategoria`, `osPorCategoria`)
+
+Cada erro devolvido por `detectarInconsistencias` tem um campo `categoria` (slug estável, ex: `aberto_excedido`) além do `motivo` (texto livre com números variáveis) — ver `CATEGORIAS_ERRO` em `js/erros.js` pros 5 valores possíveis. O label de cada categoria é o próprio texto do `motivo` daquela regra, só sem a parte numérica (que muda a cada caso, tipo "23.0h") — assim a pílula do resumo usa a mesma linguagem que já aparece no ⚠️ da tabela e no alerta do modal de histórico, em vez de um nome inventado à parte.
+
+`processarErros()` também monta:
+- **`contagemPorCategoria`** — `{ categoria: quantidade de erros brutos }`, usado só pra calcular o `%` de cada pílula.
+- **`osPorCategoria`** — `{ categoria: Set de O.S. }`, usado pra filtrar a tabela quando uma pílula está selecionada.
+
+**`renderizarResumoErros()`** desenha uma pílula clicável por categoria presente (ex: "67 (77%) Ficou em andamento sem pausa (>12h)") dentro do card de filtros (`#resumoErrosKPI` em `dashboard.html`), e só fica visível quando o filtro "Erros" está ativo. Clicar numa pílula chama `filtrarKPI('ERROS', categoria)`, que:
+- Restringe a tabela principal só às O.S. daquela categoria (via `osPorCategoria`), em vez de todas as O.S. com qualquer erro (`osComErro`).
+- Clicar de novo na mesma pílula desmarca (volta a mostrar todos os erros) — é um toggle, não uma seleção fixa.
+- Clicar no card "Com Erro" (o card principal, não uma pílula) sempre reseta pra "todas as categorias".
+
+Isso é só uma lente de leitura/filtro sobre o mesmo resultado de `detectarInconsistencias` — não muda quais O.S. contam como erro nem o número total do KPI "Erros".
+
+### Filtro O.S. x Serviço Avulso (`#dashTipoOS`)
+
+Select no card de filtros com 3 opções: Todos / Só O.S. / Só Avulso. Igual aos cards de KPI e às pílulas de categoria de erro, é um filtro **client-side** sobre `dadosResumidos` já carregado — não recarrega do Supabase, então some/aparece na hora (`change` → `renderizarTabelaPrincipal()`), sem precisar clicar em "Filtrar".
+
+Usa `ehOSNumerica(item.os)` (de `js/erros.js`) pra decidir o tipo, e some **por cima** do filtro de KPI ativo (Total/Andamento/Pausadas/Finalizadas/Erros) — os dois se combinam com E, não um substitui o outro. Ex: "Pausadas" + "Só Avulso" mostra só os Serviços Avulsos pausados.
+
 ### Editar/Excluir apontamento a partir do histórico
 
 No modal de histórico (`verHistorico`), cada linha tem botões ✏️ (editar) e 🗑️ (excluir), capturados por event delegation em `tabelaHist`:

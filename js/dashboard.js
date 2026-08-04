@@ -1,5 +1,5 @@
 import { client } from './supabaseClient.js';
-import { detectarInconsistencias, isoParaDatetimeLocalBRT, datetimeLocalBRTParaISO, ehOSNumerica } from './erros.js';
+import { detectarInconsistencias, isoParaDatetimeLocalBRT, datetimeLocalBRTParaISO, ehOSNumerica, CATEGORIAS_ERRO } from './erros.js';
 
 function esc(str) {
     if (str == null) return '';
@@ -23,6 +23,13 @@ const dtInicio = document.getElementById('dashDtInicio');
 const dtFim = document.getElementById('dashDtFim');
 const inpMatricula = document.getElementById('dashMatricula');
 const inpOS = document.getElementById('dashOS');
+const selTipoOS = document.getElementById('dashTipoOS');
+
+// Filtro rápido O.S. x Serviço Avulso — client-side, sobre os dados já carregados
+// (não recarrega do Supabase, igual aos cards de KPI e às pílulas de categoria de erro).
+if (selTipoOS) {
+    selTipoOS.addEventListener('change', renderizarTabelaPrincipal);
+}
 
 // Modal
 const modalHist = document.getElementById('modalHistorico');
@@ -48,6 +55,21 @@ let mapaHistoricoOS = {};
 let mapaErros = {};
 let osComErro = new Set();
 let filtroKPIAtual = 'TODOS';
+// Quebra do KPI "Erros" por categoria (ver CATEGORIAS_ERRO em erros.js), pra responder
+// "de N erros, quantos são de cada tipo" sem precisar abrir cada O.S. uma por uma.
+let contagemPorCategoria = {};
+let osPorCategoria = {};
+let filtroCategoriaErro = null;
+
+const resumoErrosKPI = document.getElementById('resumoErrosKPI');
+if (resumoErrosKPI) {
+    resumoErrosKPI.addEventListener('click', function(e) {
+        const btn = e.target.closest('.resumo-erro-item');
+        if (!btn) return;
+        const categoria = btn.dataset.categoria;
+        filtrarKPI('ERROS', filtroCategoriaErro === categoria ? null : categoria);
+    });
+}
 
 // Edição/exclusão de apontamento a partir do modal de histórico
 let osAtualModal = null;
@@ -73,23 +95,31 @@ window.limparFiltros = function() {
     if(dtFim) dtFim.value = "";
     if(inpMatricula) inpMatricula.value = "";
     if(inpOS) inpOS.value = "";
+    if(selTipoOS) selTipoOS.value = "TODOS";
     carregarDashboard();
 }
 
 // --- FILTRO DE KPI (VISUAL COM CSS PURO) ---
-window.filtrarKPI = function(tipo) {
+// `categoria` só faz sentido junto com tipo 'ERROS' — vem do clique num item do
+// resumo (ex: "Ainda aberto"), pra restringir a tabela só àquele tipo de erro.
+window.filtrarKPI = function(tipo, categoria) {
     filtroKPIAtual = tipo;
+    filtroCategoriaErro = tipo === 'ERROS' ? (categoria || null) : null;
     resetarEstilosCards();
-    
+
     const mapIds = { 'TODOS': 'cardTotal', 'ANDAMENTO': 'cardAndamento', 'PAUSADAS': 'cardPausadas', 'FINALIZADAS': 'cardFinalizadas', 'ERROS': 'cardErros' };
     const cardId = mapIds[tipo];
-    
+
     const el = document.getElementById(cardId);
     if(el) {
         // Usa a classe .active definida no CSS novo (simula o ring do tailwind)
         el.classList.add('active');
     }
-    
+
+    // O resumo por categoria só faz sentido (e só aparece) quando o filtro "Erros" está ativo.
+    if (resumoErrosKPI) resumoErrosKPI.classList.toggle('hidden', tipo !== 'ERROS');
+
+    atualizarEstiloResumoErros();
     renderizarTabelaPrincipal();
 }
 
@@ -97,6 +127,13 @@ function resetarEstilosCards() {
     ['cardTotal', 'cardAndamento', 'cardPausadas', 'cardFinalizadas', 'cardErros'].forEach(id => {
         const el = document.getElementById(id);
         if (el) el.classList.remove('active');
+    });
+}
+
+function atualizarEstiloResumoErros() {
+    if (!resumoErrosKPI) return;
+    resumoErrosKPI.querySelectorAll('.resumo-erro-item').forEach(btn => {
+        btn.classList.toggle('active', btn.dataset.categoria === filtroCategoriaErro);
     });
 }
 
@@ -177,17 +214,52 @@ function processarDados() {
 function processarErros() {
     mapaErros = {};
     const novoOsComErro = new Set();
+    const novaContagemPorCategoria = {};
+    const novoOsPorCategoria = {};
 
     Object.keys(mapaHistoricoOS).forEach(chave => {
         const historico = [...mapaHistoricoOS[chave]].sort((a, b) => new Date(a.created_at) - new Date(b.created_at));
         const erros = detectarInconsistencias(historico);
         if (erros.length > 0) {
             mapaErros[chave] = erros;
-            novoOsComErro.add(String(erros[0].os));
+            const osStr = String(erros[0].os);
+            novoOsComErro.add(osStr);
+
+            erros.forEach(e => {
+                novaContagemPorCategoria[e.categoria] = (novaContagemPorCategoria[e.categoria] || 0) + 1;
+                if (!novoOsPorCategoria[e.categoria]) novoOsPorCategoria[e.categoria] = new Set();
+                novoOsPorCategoria[e.categoria].add(osStr);
+            });
         }
     });
 
     osComErro = novoOsComErro;
+    contagemPorCategoria = novaContagemPorCategoria;
+    osPorCategoria = novoOsPorCategoria;
+    renderizarResumoErros();
+}
+
+// Quebra clicável do KPI "Erros" por categoria (ex: "67 (77%) Fechado após ficar aberto").
+// Clicar de novo na mesma categoria desmarca (volta a mostrar todos os erros).
+function renderizarResumoErros() {
+    if (!resumoErrosKPI) return;
+
+    const totalErros = Object.values(contagemPorCategoria).reduce((soma, n) => soma + n, 0);
+    if (totalErros === 0) {
+        resumoErrosKPI.innerHTML = '';
+        return;
+    }
+
+    resumoErrosKPI.innerHTML = Object.entries(CATEGORIAS_ERRO)
+        .filter(([categoria]) => contagemPorCategoria[categoria] > 0)
+        .map(([categoria, label]) => {
+            const n = contagemPorCategoria[categoria];
+            const pct = Math.round((n / totalErros) * 100);
+            return `<button type="button" class="resumo-erro-item" data-categoria="${categoria}">${n} (${pct}%) ${esc(label)}</button>`;
+        })
+        .join('');
+
+    atualizarEstiloResumoErros();
 }
 
 
@@ -289,7 +361,18 @@ function renderizarTabelaPrincipal() {
         else if (filtroKPIAtual === 'ANDAMENTO' && (st === 1 || st === 4)) mostrar = true;
         else if (filtroKPIAtual === 'PAUSADAS' && (st === 2 || st === 3 || st === 6)) mostrar = true;
         else if (filtroKPIAtual === 'FINALIZADAS' && (st === 5 || st === 7)) mostrar = true;
-        else if (filtroKPIAtual === 'ERROS' && osComErro.has(String(item.os))) mostrar = true;
+        else if (filtroKPIAtual === 'ERROS') {
+            mostrar = filtroCategoriaErro
+                ? (osPorCategoria[filtroCategoriaErro]?.has(String(item.os)) || false)
+                : osComErro.has(String(item.os));
+        }
+
+        // Filtro O.S. x Serviço Avulso — some por cima do filtro de KPI acima, não substitui.
+        if (mostrar && selTipoOS) {
+            const tipoOS = selTipoOS.value;
+            if (tipoOS === 'OS' && !ehOSNumerica(item.os)) mostrar = false;
+            if (tipoOS === 'AVULSO' && ehOSNumerica(item.os)) mostrar = false;
+        }
 
         if (mostrar) {
             temDado = true;
