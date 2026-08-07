@@ -1,4 +1,5 @@
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
+import { verificarBloqueio, registrarTentativaFalha, limparTentativas } from '../_shared/rateLimit.ts';
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -45,16 +46,26 @@ Deno.serve(async (req) => {
       Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
     );
 
+    const matriculaStr = String(matricula);
+
+    const bloqueio = await verificarBloqueio(supabase, matriculaStr);
+    if (bloqueio) {
+      return erro(bloqueio, 429);
+    }
+
     // Valida credenciais de admin no servidor (Admin_Maas não tem leitura pública)
     const { data: admin } = await supabase
       .from('Admin_Maas')
       .select('senha')
-      .eq('matricula', String(matricula))
+      .eq('matricula', matriculaStr)
       .maybeSingle();
 
     if (!admin || admin.senha !== senha) {
+      await registrarTentativaFalha(supabase, matriculaStr);
       return erro('Matrícula ou senha incorretos. Acesso negado.', 401);
     }
+
+    await limparTentativas(supabase, matriculaStr);
 
     if (acao === 'criar') {
       const { data: existente } = await supabase
@@ -71,7 +82,10 @@ Deno.serve(async (req) => {
         .from('Funcionarios_Maas')
         .insert([{ matricula: matriculaFunc, nome: nomeFunc, funcao: funcaoFunc, valor_hora: valorHora }]);
 
-      if (error) return erro('Erro ao criar: ' + error.message, 500);
+      if (error) {
+        console.error('gerenciar-funcionario (criar):', error.message);
+        return erro('Erro ao criar o funcionário. Tente novamente.', 500);
+      }
     } else {
       if (!funcionario.id) return erro('ID do funcionário é obrigatório para atualizar.');
 
@@ -80,7 +94,10 @@ Deno.serve(async (req) => {
         .update({ matricula: matriculaFunc, nome: nomeFunc, funcao: funcaoFunc, valor_hora: valorHora })
         .eq('id', funcionario.id);
 
-      if (error) return erro('Erro ao atualizar: ' + error.message, 500);
+      if (error) {
+        console.error('gerenciar-funcionario (atualizar):', error.message);
+        return erro('Erro ao atualizar o funcionário. Tente novamente.', 500);
+      }
     }
 
     return new Response(

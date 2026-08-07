@@ -218,7 +218,16 @@
                     <tbody id="tabelaDashboard" class="divide-y divide-gray-100">
                         <tr><td colspan="7" class="p-8 text-center text-gray-400">Carregando dados...</td></tr>
                     </tbody>
-                </table>    
+                </table>
+            </div>
+
+            <div id="paginacaoDashboard" style="display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:0.75rem; padding:0.85rem 1.5rem; border-top:1px solid var(--gray-200);">
+                <span id="paginacaoInfo" style="font-size:0.8rem; color:var(--gray-500);">Mostrando 0–0 de 0</span>
+                <div style="display:flex; align-items:center; gap:0.75rem;">
+                    <button id="btnPaginaAnterior" onclick="mudarPagina(-1)" class="btn btn-clean" style="padding:0.4rem 0.9rem; font-size:0.8rem; height:auto;">&larr; Anterior</button>
+                    <span id="paginacaoAtual" style="font-size:0.8rem; color:var(--gray-500); white-space:nowrap;">Página 1 de 1</span>
+                    <button id="btnPaginaProxima" onclick="mudarPagina(1)" class="btn btn-clean" style="padding:0.4rem 0.9rem; font-size:0.8rem; height:auto;">Próxima &rarr;</button>
+                </div>
             </div>
         </div>
 
@@ -345,6 +354,7 @@
         Publicado em 20/02/2026
         <span style="margin: 0 0.5rem;">|</span>
         <span style="font-weight: 600; color: #6b7280;">BI MAAS</span>
+        <div style="margin-top: 0.35rem; font-size: 0.65rem; letter-spacing: 0.02rem; color: #b0b6bd;">Solução provisória da MAAS Serviços, enquanto não há ferramenta própria da SIAN no Sistema de Manutenção Geral.</div>
     </footer>
 </body>
 </html>

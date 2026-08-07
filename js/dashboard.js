@@ -48,6 +48,7 @@ const selTipoOS = document.getElementById('dashTipoOS');
 // Também recalcula o resumo de categorias, já que ele reflete o Tipo selecionado no momento.
 if (selTipoOS) {
     selTipoOS.addEventListener('change', function() {
+        paginaAtual = 1;
         renderizarResumoErros();
         renderizarTabelaPrincipal();
     });
@@ -81,6 +82,10 @@ let filtroKPIAtual = 'TODOS';
 let todosOsErros = [];
 let osPorCategoria = {};
 let filtroCategoriaErro = null;
+
+// Paginação da tabela principal — evita renderizar milhares de linhas de uma vez.
+const ITENS_POR_PAGINA = 25;
+let paginaAtual = 1;
 
 const resumoErrosKPI = document.getElementById('resumoErrosKPI');
 if (resumoErrosKPI) {
@@ -146,6 +151,7 @@ window.filtrarKPI = function(tipo, categoria, tipoOS) {
     filtroKPIAtual = tipo;
     filtroCategoriaErro = tipo === 'ERROS' ? (categoria || null) : null;
     if (tipoOS && selTipoOS) selTipoOS.value = tipoOS;
+    paginaAtual = 1;
 
     resetarEstilosCards();
 
@@ -419,22 +425,11 @@ function calcularKPIs() {
     atualizarKPIs('AVULSO', calcularKPIsPorTipo(os => !ehOSNumerica(os)));
 }
 
-// COPIE DAQUI 👇
-function renderizarTabelaPrincipal() {
-    // Essa linha aqui (o return) só funciona se estiver dentro das chaves { } da função
-    if (!tabela) return;
-
-    if (!dadosResumidos || dadosResumidos.length === 0) {
-        tabela.innerHTML = '<tr><td colspan="7" class="text-center" style="padding:2rem; color:#9ca3af;">🔍 Nenhum registro encontrado.</td></tr>';
-        return;
-    }
-
-    let htmlLinhas = '';
-    let temDado = false;
-
-    dadosResumidos.forEach(item => {
+// Aplica o filtro de KPI + Tipo (O.S./Avulso) sobre dadosResumidos, sem paginar ainda.
+function filtrarDadosResumidos() {
+    return dadosResumidos.filter(item => {
         const st = Number(item.status_cod);
-        
+
         let mostrar = false;
         if (filtroKPIAtual === 'TODOS') mostrar = true;
         else if (filtroKPIAtual === 'ANDAMENTO' && (st === 1 || st === 4)) mostrar = true;
@@ -453,10 +448,62 @@ function renderizarTabelaPrincipal() {
             if (tipoOS === 'AVULSO' && ehOSNumerica(item.os)) mostrar = false;
         }
 
-        if (mostrar) {
-            temDado = true;
+        return mostrar;
+    });
+}
 
-            const dataObj = new Date(item.created_at);
+window.mudarPagina = function(delta) {
+    paginaAtual += delta;
+    renderizarTabelaPrincipal();
+}
+
+function renderizarPaginacao(totalItens) {
+    const info = document.getElementById('paginacaoInfo');
+    const atualEl = document.getElementById('paginacaoAtual');
+    const btnAnterior = document.getElementById('btnPaginaAnterior');
+    const btnProxima = document.getElementById('btnPaginaProxima');
+    if (!info || !atualEl || !btnAnterior || !btnProxima) return;
+
+    const totalPaginas = Math.max(1, Math.ceil(totalItens / ITENS_POR_PAGINA));
+    const inicio = totalItens === 0 ? 0 : (paginaAtual - 1) * ITENS_POR_PAGINA + 1;
+    const fim = Math.min(paginaAtual * ITENS_POR_PAGINA, totalItens);
+
+    info.textContent = `Mostrando ${inicio}–${fim} de ${totalItens}`;
+    atualEl.textContent = `Página ${paginaAtual} de ${totalPaginas}`;
+    btnAnterior.disabled = paginaAtual <= 1;
+    btnProxima.disabled = paginaAtual >= totalPaginas;
+}
+
+function renderizarTabelaPrincipal() {
+    if (!tabela) return;
+
+    if (!dadosResumidos || dadosResumidos.length === 0) {
+        tabela.innerHTML = '<tr><td colspan="7" class="text-center" style="padding:2rem; color:#9ca3af;">🔍 Nenhum registro encontrado.</td></tr>';
+        renderizarPaginacao(0);
+        return;
+    }
+
+    const itensFiltrados = filtrarDadosResumidos();
+
+    if (itensFiltrados.length === 0) {
+        tabela.innerHTML = `<tr><td colspan="7" class="text-center" style="padding:2rem; color:#9ca3af;">Nenhum registro com status "${filtroKPIAtual}".</td></tr>`;
+        renderizarPaginacao(0);
+        return;
+    }
+
+    // Corrige a página atual se ela ficou fora do intervalo (ex: filtro reduziu o total).
+    const totalPaginas = Math.max(1, Math.ceil(itensFiltrados.length / ITENS_POR_PAGINA));
+    if (paginaAtual > totalPaginas) paginaAtual = totalPaginas;
+    if (paginaAtual < 1) paginaAtual = 1;
+
+    const inicioIndice = (paginaAtual - 1) * ITENS_POR_PAGINA;
+    const itensPagina = itensFiltrados.slice(inicioIndice, inicioIndice + ITENS_POR_PAGINA);
+
+    let htmlLinhas = '';
+
+    itensPagina.forEach(item => {
+        const st = Number(item.status_cod);
+        const dataObj = new Date(item.created_at);
             const hora = dataObj.toLocaleTimeString('pt-BR', {hour:'2-digit', minute:'2-digit'});
             const dataFmt = dataObj.toLocaleDateString('pt-BR');
 
@@ -508,14 +555,10 @@ function renderizarTabelaPrincipal() {
                     </td>
                 </tr>
             `;
-        }
     });
 
-    if(!temDado) {
-        tabela.innerHTML = `<tr><td colspan="7" class="text-center" style="padding:2rem; color:#9ca3af;">Nenhum registro com status "${filtroKPIAtual}".</td></tr>`;
-    } else {
-        tabela.innerHTML = htmlLinhas;
-    }
+    tabela.innerHTML = htmlLinhas;
+    renderizarPaginacao(itensFiltrados.length);
 }
 
 function atualizarKPIs(tipo, stats) {

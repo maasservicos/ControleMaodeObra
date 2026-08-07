@@ -85,7 +85,7 @@ window.consultarOS = async function() {
 
         const { data, error } = await client
             .from('SistemaOS_Maas')
-            .select('*')
+            .select('matricula, status_cod, created_at')
             .eq('os', os)
             .order('created_at', { ascending: true });
 

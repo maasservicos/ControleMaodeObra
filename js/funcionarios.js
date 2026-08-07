@@ -21,16 +21,26 @@ let listaFuncionarios = [];
 
 async function chamarFuncao(nome, payload) {
     const url = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/${nome}`;
-    const resp = await fetch(url, {
-        method: 'POST',
-        headers: {
-            'Content-Type': 'application/json',
-            'apikey': import.meta.env.VITE_SUPABASE_KEY,
-        },
-        body: JSON.stringify(payload),
-    });
-    const result = await resp.json();
-    return { ok: resp.ok, result };
+    try {
+        const resp = await fetch(url, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'apikey': import.meta.env.VITE_SUPABASE_KEY,
+            },
+            body: JSON.stringify(payload),
+        });
+        let result;
+        try {
+            result = await resp.json();
+        } catch {
+            result = { error: 'Resposta inválida do servidor. Tente novamente.' };
+        }
+        return { ok: resp.ok, result };
+    } catch (err) {
+        console.error('chamarFuncao:', nome, err);
+        return { ok: false, result: { error: 'Erro de conexão. Verifique sua internet e tente novamente.' } };
+    }
 }
 
 window.entrarAdmin = async function() {

@@ -1,4 +1,5 @@
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
+import { verificarBloqueio, registrarTentativaFalha, limparTentativas } from '../_shared/rateLimit.ts';
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -28,18 +29,31 @@ Deno.serve(async (req) => {
       Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
     );
 
+    const matriculaStr = String(matricula);
+
+    const bloqueio = await verificarBloqueio(supabase, matriculaStr);
+    if (bloqueio) {
+      return new Response(
+        JSON.stringify({ error: bloqueio }),
+        { status: 429, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
+    }
+
     const { data: admin } = await supabase
       .from('Admin_Maas')
       .select('nome, senha')
-      .eq('matricula', String(matricula))
+      .eq('matricula', matriculaStr)
       .maybeSingle();
 
     if (!admin || admin.senha !== senha) {
+      await registrarTentativaFalha(supabase, matriculaStr);
       return new Response(
         JSON.stringify({ error: 'Matrícula ou senha incorretos. Acesso negado.' }),
         { status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
     }
+
+    await limparTentativas(supabase, matriculaStr);
 
     return new Response(
       JSON.stringify({ ok: true, nome: admin.nome }),

@@ -478,9 +478,7 @@ async function carregarLista() {
     
     if(data && data.length > 0) {
         data.forEach(item => {
-            const dataObj = new Date(item.created_at);
-            dataObj.setHours(dataObj.getHours() - 3);
-            const hora = dataObj.toLocaleTimeString('pt-BR', {hour:'2-digit', minute:'2-digit'});
+            const hora = isoParaDatetimeLocalBRT(item.created_at).split('T')[1];
             
             let badgeClass = "badge badge-gray";
             let texto = item.status_cod;
@@ -638,7 +636,6 @@ window.fecharModal = function() {
 }
 
 window.confirmarEnvio = function() {
-    console.log("Confirmado no modal! Ação pendente:", statusPendente);
     if (statusPendente) {
         // Não usa fecharModal() aqui: ele zera `travado`, e o salvamento
         // ainda está em andamento — quem libera a trava é executarSalvamento.
@@ -649,9 +646,6 @@ window.confirmarEnvio = function() {
 }
 
 async function executarSalvamento(codigoStatus) {
-    console.log("--- INICIANDO SALVAMENTO ---");
-    console.log("Botão clicado:", codigoStatus);
-
     // ✅ CORREÇÃO: Limpeza de espaços e zeros à esquerda
     const matriculaBruta = txtMatricula.value.trim();
     const matricula = Number(matriculaBruta).toString();
@@ -663,17 +657,11 @@ async function executarSalvamento(codigoStatus) {
     document.body.style.cursor = 'wait';
 
     if (codigoStatus === 5 || codigoStatus === 7) {
-        console.log("✅ Entrou no IF de cálculo (Status 5 ou 7 detectado)");
-        
         try {
-            console.log(`🔍 Chamando calculadora para Matrícula: ${matricula}, OS: ${os}`);
             horasCalculadas = await calcularHorasTrabalhadas(matricula, os);
-            console.log("💰 RESULTADO DO CÁLCULO:", horasCalculadas); 
         } catch (erro) {
-            console.error("❌ ERRO NA CALCULADORA:", erro);
+            console.error("Erro ao calcular horas trabalhadas:", erro);
         }
-    } else {
-        console.log("⏩ Pulou o cálculo (Status não é de finalização)");
     }
 
     const dadosParaSalvar = { 
@@ -685,8 +673,6 @@ async function executarSalvamento(codigoStatus) {
         horas_trabalhadas: horasCalculadas 
     };
 
-    console.log("📦 ENVIANDO PARA O SUPABASE:", dadosParaSalvar);
-
     const { error } = await client.from('SistemaOS_Maas').insert([dadosParaSalvar]);
     
     document.body.style.cursor = 'default';
@@ -694,8 +680,7 @@ async function executarSalvamento(codigoStatus) {
     if (!error) {
         let mensagem = "✅ SALVO!";
         if (horasCalculadas) mensagem += `\nTempo: ${horasCalculadas}`;
-        
-        console.log("Sucesso! Mensagem:", mensagem);
+
         mostrarAviso(mensagem, "Apontando...");
         
         setTimeout(() => window.limparTela(), 3000);
